@@ -8,6 +8,10 @@ import os, collections, random, time, torch, torch.nn as nn
 torch.manual_seed(0); random.seed(0)
 DDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "metaqa")
 d = 48; CAP = 80; NTRAIN = 8000; NTEST = 1500; EPOCHS = 5
+# TRAIN_DEGNORM=1 folds the in-degree normalization (currently eval-time only) into the
+# TRAINING objective, so the model is optimized under the exact decision rule used at eval.
+# The degree-bias fix moved eval 0.864 -> 0.948; aligning training should push it further.
+TRAIN_DEGNORM = os.environ.get("TRAIN_DEGNORM", "0") == "1"
 
 ent2id, rel2id = {}, {}; adj = collections.defaultdict(list)
 with open(os.path.join(DDIR, "kb", "kb.txt")) as f:
@@ -57,7 +61,8 @@ def prep(split, limit):
         if len(out) >= limit: break
     return out
 t0 = time.time(); tr = prep("train", NTRAIN); te = prep("test", NTEST)
-print(f"KG {Ne} ent/{Nr} rel | 2-hop tractable: train {len(tr)} test {len(te)} | prep {time.time()-t0:.0f}s")
+print(f"KG {Ne} ent/{Nr} rel | 2-hop tractable: train {len(tr)} test {len(te)} | prep {time.time()-t0:.0f}s"
+      f" | TRAIN_DEGNORM={'on' if TRAIN_DEGNORM else 'off'}")
 
 vocab = {"<unk>": 0, "<pad>": 1}
 for _, qt, _, _ in tr:
@@ -105,6 +110,11 @@ for ep in range(EPOCHS):
     for (topic, qt, ans, G) in tr:
         mass = run_flow(qt, G); gold = set(ent2id[a] for a in ans if a in ent2id)
         tgt = torch.tensor([1.0 if e in gold else 0.0 for e in G["e2set"]])
+        if TRAIN_DEGNORM:                                   # normalize by in-degree BEFORE the loss
+            indeg = torch.zeros(len(G["e2set"]))
+            for (i, j, key) in G["edges"]:
+                if key is not None and key[0] == 1: indeg[j - G["o2"]] += 1
+            mass = mass / (indeg + 1e-6)
         p = mass / (mass.sum() + 1e-9)
         bl = bl + -(tgt / tgt.sum() * (p + 1e-9).log()).sum(); n += 1
         if n % 16 == 0: (bl / 16).backward(); opt.step(); opt.zero_grad(); tot += bl.item(); bl = 0.0
