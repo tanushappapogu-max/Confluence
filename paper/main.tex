@@ -70,6 +70,16 @@ hard fixed point. A matrix-free conjugate-gradient forward solve (Laplacian-vect
 the edge list, $O(E)$/iter) replaces the dense $O(N^3)$ solve, matching it to $\sim\!10^{-3}$ and
 solving $N\!\approx\!2400$ neighborhoods in $\sim\!0.4$s.
 
+\begin{figure}[h]\centering
+\includegraphics[width=\textwidth]{figs/implicit_diff.png}
+\caption{Differentiating and solving the flow at scale. (a) The implicit gradient matches a
+finite-difference gold standard to relative error $\sim\!10^{-8}$ across graph sizes.
+(b) Backward memory is flat in solver depth for implicit differentiation (forward runs under
+\texttt{no\_grad}) while unrolled autograd grows linearly. (c) The matrix-free (VJP-only)
+implicit gradient avoids the $O(E^2)$ Jacobian, so its wall-clock scales far better with edges.}
+\label{fig:implicit}
+\end{figure}
+
 \section{Experiments}\label{sec:exp}
 \paragraph{Mechanism (synthetic).} A single optimal path emerges and alternatives wither; $14$
 redundant edges collapse to $2$; gradient through the fixed point re-routes the path.
