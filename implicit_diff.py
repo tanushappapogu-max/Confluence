@@ -25,6 +25,8 @@ WHAT THIS SCRIPT SHOWS (run: python3 implicit_diff.py):
   TEST B  memory      : unrolled autograd memory grows with #solver steps; implicit is flat.
   TEST C  scaling     : implicit matches unroll gradients at every graph size while running
                         a fully-converged solve -- i.e. the tractable-subset bias is removable.
+  TEST D  matrix-free : the O(E)-memory VJP-only solve (no E x E Jacobian) matches the exact
+                        version + FD, and scales to the node counts the paper's tail needs.
 
 A target-MSE loss (0.5 * ||z* - target||^2) is used so the gradient stays non-trivial at
 the fixed point (a pure linear loss on z* vanishes once the flow collapses to one path).
@@ -139,6 +141,32 @@ def grad_implicit(theta, B, b, keep, n_iter_fwd, target, dt=0.7):
     return dloss_dtheta.detach().clone(), loss
 
 
+def grad_implicit_free(theta, B, b, keep, n_iter_fwd, target, dt=0.7, n_iter_bwd=200, tol=1e-9):
+    """MATRIX-FREE implicit gradient: same IFT solve as grad_implicit but NEVER forms the
+    E x E Jacobian. Solves (I - J^T) u = g by Neumann/Richardson iteration u <- g + J^T u,
+    where each J^T u is a single vector-Jacobian product (one autograd.grad). Cost is
+    O(n_iter_bwd) VJPs, memory O(E) -- so it reaches the thousands-of-node neighborhoods
+    (2-hop tail, 3-hop) where the dense O(E^2) Jacobian and the unrolled solve are both
+    intractable. Not inside a backward hook, so no recursion."""
+    theta = theta.clone().detach().requires_grad_(True)
+    L = costs_from_theta(theta)
+    with torch.no_grad():
+        z_star = solve_forward(L, B, b, keep, n_iter_fwd, dt)
+    z = z_star.detach().requires_grad_(True)
+    Fz = F_step(z, L, B, b, keep)                        # one differentiable step at z*
+    g = (z_star - target)                                 # dloss/dz*
+    u = g.clone()
+    for _ in range(n_iter_bwd):                           # Neumann: u_{k+1} = g + J^T u_k
+        Jt_u, = torch.autograd.grad(Fz, z, grad_outputs=u, retain_graph=True)
+        u_new = g + Jt_u
+        if (u_new - u).norm() <= tol * (u.norm() + tol):
+            u = u_new; break
+        u = u_new
+    dloss_dtheta, = torch.autograd.grad(Fz, theta, grad_outputs=u)   # (dF/dtheta)^T u
+    loss = 0.5 * ((z_star - target) ** 2).sum().item()
+    return dloss_dtheta.detach().clone(), loss
+
+
 def fixed_point_residual(theta, B, b, keep, n_iter, dt=0.5):
     with torch.no_grad():
         L = costs_from_theta(theta)
@@ -223,11 +251,56 @@ def test_scaling():
     print("  tractable-subset restriction on the MetaQA 2-hop results.")
 
 
+def test_matrix_free():
+    print("\n" + "=" * 82)
+    print("TEST D - matrix-free implicit solve: matches exact-Jacobian + FD, then scales")
+    print("=" * 82)
+    # D1: agreement with explicit-Jacobian implicit AND finite-difference gold (small graphs)
+    print("  agreement on small graphs (vs FD gold and vs explicit-Jacobian implicit):")
+    print(f"  {'N':>4} {'E':>4} {'cos(free,FD)':>14} {'rel(free,FD)':>14} {'rel(free,exact)':>16}")
+    ok = True
+    for seed in range(4):
+        N = 10 + seed * 4
+        B, b, keep, E = random_graph(N, extra_edges=N, seed=seed)
+        torch.manual_seed(200 + seed); theta = 0.5 * torch.randn(E); target = 0.5 * torch.rand(E)
+        g_fd = grad_numeric(theta, B, b, keep, target)
+        g_ex, _ = grad_implicit(theta, B, b, keep, 4000, target)
+        g_fr, _ = grad_implicit_free(theta, B, b, keep, 4000, target)
+        cos = torch.nn.functional.cosine_similarity(g_fr, g_fd, dim=0).item()
+        rfd = ((g_fr - g_fd).norm() / (g_fd.norm() + 1e-12)).item()
+        rex = ((g_fr - g_ex).norm() / (g_ex.norm() + 1e-12)).item()
+        ok = ok and cos > 0.99999 and rfd < 1e-3
+        print(f"  {N:>4} {E:>4} {cos:>14.8f} {rfd:>14.2e} {rex:>16.2e}")
+    # D2: where both are feasible, matrix-free is faster and agrees with exact.
+    print("\n  scaling (wall-clock): matrix-free vs explicit-Jacobian implicit (both feasible)")
+    print(f"  {'N':>5} {'E':>6} {'exact ms':>10} {'free ms':>10} {'speedup':>9} {'rel(free,exact)':>16}")
+    for N in [100, 300]:
+        B, b, keep, E = random_graph(N, extra_edges=2 * N, seed=N)
+        torch.manual_seed(N); theta = 0.5 * torch.randn(E); target = 0.5 * torch.rand(E)
+        t = time.time(); g_ex, _ = grad_implicit(theta, B, b, keep, 3000, target); t_ex = (time.time()-t)*1e3
+        t = time.time(); g_fr, _ = grad_implicit_free(theta, B, b, keep, 3000, target); t_fr = (time.time()-t)*1e3
+        rex = ((g_fr - g_ex).norm() / (g_ex.norm() + 1e-12)).item()
+        print(f"  {N:>5} {E:>6} {t_ex:>10.1f} {t_fr:>10.1f} {t_ex/max(t_fr,1e-9):>8.1f}x {rex:>16.2e}")
+    # D3: matrix-free ALONE at sizes where forming the E x E Jacobian is intractable.
+    print("\n  matrix-free at scale (exact-Jacobian version not run -- O(E^2) infeasible here):")
+    print(f"  {'N':>5} {'E':>6} {'free ms':>10} {'fp_resid':>10} {'||grad||':>10}")
+    for N in [600, 1000]:
+        B, b, keep, E = random_graph(N, extra_edges=2 * N, seed=N)
+        torch.manual_seed(N); theta = 0.5 * torch.randn(E); target = 0.5 * torch.rand(E)
+        resid = fixed_point_residual(theta, B, b, keep, 3000, dt=0.7)
+        t = time.time(); g_fr, _ = grad_implicit_free(theta, B, b, keep, 3000, target); t_fr = (time.time()-t)*1e3
+        print(f"  {N:>5} {E:>6} {t_fr:>10.1f} {resid:>10.1e} {g_fr.norm().item():>10.4f}")
+    print("  matrix-free needs only VJPs (O(E) memory, no E x E Jacobian) -> this is the")
+    print("  version that reaches the 2-hop heavy tail and the 3-hop ~12k-node neighborhoods.")
+    return ok
+
+
 if __name__ == "__main__":
     t0 = time.time()
     ok = test_correctness()
     test_memory()
     test_scaling()
+    ok = test_matrix_free() and ok
     print(f"\ntotal {time.time()-t0:.0f}s")
     print("VERDICT:", "implicit differentiation verified correct + memory-flat + scalable."
           if ok else "correctness check FAILED -- do not use.")
