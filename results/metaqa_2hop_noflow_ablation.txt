@@ -1,0 +1,13 @@
+KG 43234 ent/9 rel | 2-hop tractable: train 8000 test 1500 | prep 4s
+training NO-FLOW ablation (independent per-hop softmax, same encoder/graph)...
+  epoch 0: loss 0.982  hits@1 raw 0.869  degree-norm 0.935  (37s)
+  epoch 1: loss 0.711  hits@1 raw 0.869  degree-norm 0.934  (232s)
+  epoch 2: loss 0.694  hits@1 raw 0.865  degree-norm 0.944  (1362s)
+  epoch 3: loss 0.677  hits@1 raw 0.876  degree-norm 0.938  (1365s)
+  epoch 4: loss 0.656  hits@1 raw 0.885  degree-norm 0.941  (1393s)
+
+Compare against v2 (flow). If flow >> this at matched encoder/graph, the conserved
+flow contributes accuracy. If ~equal, Confluence's contribution is the guarantee +
+unification, not raw accuracy on this task. Legality (0 hallucination) holds in BOTH.
+
+[exited with code 0]
