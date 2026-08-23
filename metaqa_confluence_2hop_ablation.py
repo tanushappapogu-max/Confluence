@@ -102,26 +102,29 @@ def qheads(qt):
     _, h = gru(x); h = h.squeeze(0).squeeze(0)
     return head1(h), head2(h)
 
-def edge_score(q, r, dr, e):
-    f = torch.cat([q, emb_rel(torch.tensor(r)), dir_emb(torch.tensor(dr)), emb_ent(torch.tensor(e))])
-    return edge_mlp(f).squeeze()          # raw logit (NO softplus/cost transform: this is a scorer, not a cost)
+def edge_scores(q, R, Dr, Ent):
+    """Vectorized edge logits for a batch of edges. q:[d]; R,Dr,Ent: id tensors [E]."""
+    qx = q.unsqueeze(0).expand(R.shape[0], -1)
+    f = torch.cat([qx, emb_rel(R), dir_emb(Dr), emb_ent(Ent)], dim=1)
+    return edge_mlp(f).squeeze(1)         # raw logits (a scorer, not a cost) [E]
 
 def run_noflow(qt, G):
-    """Independent per-hop softmax over the SAME candidate edges -- no conservation solve."""
+    """No-flow control: score legal 2-hop paths independently and softmax over them, then
+    marginalize to answers. Same encoder/graph/legality as the flow model; NO conservation
+    solve, NO coupling. Vectorized + autograd-safe (out-of-place scatter, no in-place writes)."""
     q1, q2 = qheads(qt)
     n1, n2 = len(G["e1set"]), len(G["e2set"])
-    # hop1: p(e1) = softmax over hop1 edge scores, aggregated to e1 nodes (logsumexp over parallel edges)
-    s1 = torch.full((n1,), -1e9)
-    for (i1, r, dr, e1) in G["hop1"]:
-        s1[i1] = torch.logaddexp(s1[i1], edge_score(q1, r, dr, e1))
-    p1 = torch.softmax(s1, 0)
-    # hop2: for each e1, p(e2|e1) = softmax over its outgoing hop2 edges; mass(e2) = sum_e1 p(e1) p(e2|e1)
-    s2 = torch.full((n1, n2), -1e9)
-    for (i1, i2, r2, dr2, e2) in G["hop2"]:
-        s2[i1, i2] = torch.logaddexp(s2[i1, i2], edge_score(q2, r2, dr2, e2))
-    p2 = torch.softmax(s2, 1)             # [n1, n2]
-    mass = (p1.unsqueeze(1) * p2).sum(0)  # [n2]
-    return mass
+    h1, h2 = G["hop1"], G["hop2"]
+    if not h1 or not h2: return torch.zeros(n2)
+    # hop1: per-e1 score = max-pool over its hop1 edges (out-of-place scatter_reduce)
+    s1e = edge_scores(q1, torch.tensor([e[1] for e in h1]), torch.tensor([e[2] for e in h1]), torch.tensor([e[3] for e in h1]))
+    i1 = torch.tensor([e[0] for e in h1])
+    s1 = torch.full((n1,), -1e9).scatter_reduce(0, i1, s1e, reduce="amax", include_self=True)
+    # hop2: path score = s1[parent e1] + hop2 edge score; softmax over all legal paths; sum to e2
+    s2e = edge_scores(q2, torch.tensor([e[2] for e in h2]), torch.tensor([e[3] for e in h2]), torch.tensor([e[4] for e in h2]))
+    par = torch.tensor([e[0] for e in h2]); chi = torch.tensor([e[1] for e in h2])
+    p_path = torch.softmax(s1[par] + s2e, 0)
+    return torch.zeros(n2).scatter_add(0, chi, p_path)
 
 def indeg_vec(G):
     indeg = torch.zeros(len(G["e2set"]))
