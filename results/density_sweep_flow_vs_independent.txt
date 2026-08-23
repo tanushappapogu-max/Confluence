@@ -1,0 +1,14 @@
+density sweep | M=8 K=3 seeds=[11, 22, 33] densities=[0.35, 0.5, 0.65, 0.8, 1.0]
+
+ density  #legal   MSE_myc  MSE_free  MSE_rout  gap(free-myc)  illeg_myc illeg_free
+---------------------------------------------------------------------------------------------
+    0.35      46     0.586     0.983     0.745          0.397      0.024      0.377
+    0.50     106     0.405     0.570     0.476          0.166      0.019      0.077
+    0.65     216     0.460     0.585     0.520          0.124      0.019      0.066
+    0.80     275     0.445     0.562     0.478          0.117      0.016      0.058
+    1.00     512     0.509     0.573     0.490          0.064      0.000      0.000
+
+(MSE at hint alpha=2.0; gap>0 means mycelial better. HYPOTHESIS: gap shrinks toward density=1.0 = unconstrained)
+total 1505s
+
+[exited with code 0]
