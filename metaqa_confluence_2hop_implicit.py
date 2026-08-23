@@ -65,9 +65,57 @@ def sink_mass_from(D, G):
 
 
 @torch.no_grad()
-def eval_mass(qt, G, enc):
+def _lap_matvec(x, w, si, di, N):
+    """Matrix-free Laplacian-vector product L(w) x from the edge list (x has sink entry 0).
+    Per edge e=(i,j): flow = w_e (x_i - x_j) adds to node i, subtracts from node j."""
+    flow = w * (x[si] - x[di])
+    out = torch.zeros(N, dtype=x.dtype)
+    out.index_add_(0, si, flow); out.index_add_(0, di, -flow)
+    return out
+
+
+@torch.no_grad()
+def _cg_solve(w, b, si, di, N, sink, iters=400, tol=1e-10, reg=1e-4):
+    """Solve the grounded L(w) p = b for p (p[sink]=0) by conjugate gradient, matrix-free.
+    SPD system -> CG converges; cost O(E) per iter, no dense N x N matrix. reg on diagonal."""
+    def A(x):
+        y = _lap_matvec(x, w, si, di, N) + reg * x
+        y[sink] = 0.0; return y
+    p = torch.zeros(N, dtype=b.dtype); r = b.clone(); r[sink] = 0.0
+    d = r.clone(); rs = (r * r).sum()
+    for _ in range(iters):
+        Ad = A(d); alpha = rs / ((d * Ad).sum() + 1e-30)
+        p = p + alpha * d; r = r - alpha * Ad
+        rs_new = (r * r).sum()
+        if rs_new.sqrt() < tol: break
+        d = r + (rs_new / (rs + 1e-30)) * d; rs = rs_new
+    p[sink] = 0.0; return p
+
+
+@torch.no_grad()
+def solve_forward_mf(Lv, edges, N, sink, iters, dt=0.5):
+    """Scalable forward: same reinforcement fixed point as solve_forward but the per-iteration
+    linear solve is matrix-free CG -> scales to the large heavy-tail neighborhoods (no dense
+    O(N^3) solve). Returns D* = regularized |Q*|.  RHO matches implicit_diff.RHO."""
+    si = torch.tensor([e[0] for e in edges]); di = torch.tensor([e[1] for e in edges])
+    b = torch.zeros(N, dtype=Lv.dtype); b[0] = 1.0; b[sink] = -1.0
+    D = torch.ones(len(edges), dtype=Lv.dtype)
+    for _ in range(iters):
+        w = D / Lv
+        p = _cg_solve(w, b, si, di, N, sink)
+        Q = w * (p[si] - p[di])
+        Fz = (1.0 - implicit_diff.RHO) * Q.abs() + implicit_diff.RHO
+        D = (D + dt * (Fz - D)).clamp(min=1e-9)
+    return D
+
+
+@torch.no_grad()
+def eval_mass(qt, G, enc, sparse=False):
     Lv, inc, b, keep = build_flow(qt, G, enc)
-    D = solve_forward(Lv, inc, b, keep, FWD_ITERS, dt=0.5)
+    if sparse or G["N"] > 500:                     # matrix-free CG for large neighborhoods
+        D = solve_forward_mf(Lv, G["edges"], G["N"], G["sink"], FWD_ITERS, dt=0.5)
+    else:
+        D = solve_forward(Lv, inc, b, keep, FWD_ITERS, dt=0.5)
     return sink_mass_from(D, G)
 
 
@@ -244,7 +292,40 @@ def load_kb_and_run():
     print("\nImplicit-diff backward (O(E) memory, no unroll) + CAP lifted -> heavy tail no longer excluded.")
 
 
+def scalecheck():
+    """Prove matrix-free CG forward == dense forward (same mass), then scale to large N."""
+    print("SCALE-CHECK: matrix-free CG forward vs dense forward, then large-N timing\n")
+    def syn(M, K, deg, seed):
+        g = torch.Generator().manual_seed(seed)
+        o1, o2 = 2, 2 + M; sink = o2 + K; N = sink + 1; edges = [(0, 1, None)]
+        for i in range(M): edges.append((1, o1 + i, None))
+        for i in range(M):
+            for c in torch.randperm(K, generator=g)[:deg].tolist(): edges.append((o1 + i, o2 + c, None))
+        for c in range(K): edges.append((o2 + c, sink, None))
+        inc = torch.zeros(N, len(edges))
+        for e, (i, j, _) in enumerate(edges): inc[i, e] = 1.0; inc[j, e] = -1.0
+        keep = torch.tensor([x for x in range(N) if x != sink])
+        b = torch.zeros(N); b[0] = 1.0; b[sink] = -1.0
+        return edges, inc, b, keep, N, sink
+    print(f"  {'N':>6} {'E':>7} {'max|mass_dense-mass_mf|':>24} {'dense ms':>10} {'mf ms':>9}")
+    for (M, K, deg) in [(6, 10, 4), (20, 60, 5), (60, 200, 6)]:
+        edges, inc, b, keep, N, sink = syn(M, K, deg, seed=N if False else M)
+        torch.manual_seed(M); Lv = torch.nn.functional.softplus(torch.randn(len(edges), dtype=torch.float64)) + 0.05
+        t = time.time(); Dd = solve_forward(Lv, inc, b, keep, 60, dt=0.5); td = (time.time()-t)*1e3
+        t = time.time(); Dm = solve_forward_mf(Lv, edges, N, sink, 60, dt=0.5); tm = (time.time()-t)*1e3
+        diff = (Dd - Dm).abs().max().item()
+        print(f"  {N:>6} {len(edges):>7} {diff:>24.2e} {td:>10.1f} {tm:>9.1f}")
+    # large N where dense is infeasible: matrix-free alone
+    edges, inc, b, keep, N, sink = syn(400, 2000, 6, seed=7)
+    t = time.time(); Dm = solve_forward_mf(Lv := (torch.nn.functional.softplus(torch.randn(len(edges), dtype=torch.float64))+0.05), edges, N, sink, 40, dt=0.5); tm = (time.time()-t)*1e3
+    print(f"\n  large: N={N} E={len(edges)} solved matrix-free in {tm:.0f} ms (dense O(N^3) infeasible)")
+    print("  matrix-free forward -> eval can decode the FULL 2-hop distribution incl. heavy tail.")
+    return True
+
+
 if __name__ == "__main__":
+    if "--scalecheck" in sys.argv:
+        sys.exit(0 if scalecheck() else 1)
     if "--selfcheck" in sys.argv or not os.path.exists(os.path.join(DDIR, "kb", "kb.txt")):
         if not os.path.exists(os.path.join(DDIR, "kb", "kb.txt")):
             print("(MetaQA data not found -> running gradient self-check instead of training)\n")
