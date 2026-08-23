@@ -1,0 +1,111 @@
+% Confluence — ICLR submission draft (skeleton).
+% Numbers marked \TODO{...} are data-gated: fill from the runs in SUBMISSION_STATUS.md.
+% Compile with pdflatex; swap \documentclass for the official iclr style file when finalizing.
+\documentclass{article}
+\usepackage{amsmath,amssymb,booktabs,graphicx,url,hyperref}
+\usepackage[margin=1in]{geometry}
+\newcommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO: #1]}}}
+\usepackage{xcolor}
+
+\title{Confluence: Unifying Retrieval and Computation as a Conserved-Flow Path\\
+\large Legality by Topology}
+\author{Tanush Appapogu}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Retrieval and computation are usually two glued-together stages: search a memory, then run a
+fixed reasoning stack, with nothing preventing illegal logical jumps. We make look-up and
+computation the \emph{same} act. We place every fact and every compute-expert as nodes of a
+single per-query graph whose edges are exactly the legal transitions, and answer a query by
+routing \emph{one} differentiable, min-cost \emph{conserved flow} (a Tero--Nakagaki Physarum
+dynamic) through it. The flow relaxes to the cheapest \emph{legal} path, which retrieves at data
+nodes and computes at expert nodes in one connected sweep. Two guarantees fall out of the
+mechanism: \emph{legality by topology} (a constraint violation is impossible, not penalized,
+because there is no edge where there is no triple) and \emph{conservation coupling} (flow-in
+equals flow-out, coupling consecutive steps). We show the mechanism is real, differentiable, and
+trainable; that on MetaQA 2-hop it reaches \TODO{hits@1} with a hard 0-hallucination guarantee;
+and that the flow can be trained by implicit differentiation through its fixed point, removing the
+cost that otherwise restricts it to small neighborhoods.
+\end{abstract}
+
+\section{Introduction}
+Standard retrieval-augmented pipelines take the top-$k$ most similar facts and \emph{average}
+them (a lossy ``averaging ceiling''), then feed a fixed stack; nothing enforces that reasoning
+steps are legal. We collapse retrieval and computation into a single min-cost legal path through
+one graph. Contributions:
+\begin{itemize}
+  \item A conserved-flow / Physarum dynamic used as the \emph{router itself} (\S\ref{sec:method}).
+  \item \textbf{Hard, input-conditional legality by topology}: illegal transitions are impossible,
+        not merely rare (\S\ref{sec:method}, \S\ref{sec:exp}).
+  \item \textbf{Unification of retrieval and computation} in one flow through data and weight nodes.
+  \item \textbf{Scalability}: implicit differentiation through the flow fixed point and a
+        matrix-free forward solve, verified to machine precision (\S\ref{sec:scaling}).
+\end{itemize}
+
+\section{Method}\label{sec:method}
+\paragraph{Graph and costs.} A signed incidence $B\in\mathbb{R}^{N\times E}$ encodes the per-query
+legal graph. An encoder maps the input to per-edge logits $z$; edge cost $L_e=\mathrm{softplus}(-z_e)+\varepsilon$.
+\paragraph{Conserved-flow dynamic.} With conductance $D_e$ and weight $w_e=D_e/L_e$, flux
+$Q_e=w_e(B^\top p)_e$ obeys Kirchhoff conservation $\mathcal{L}(w)\,p=b$, where
+$\mathcal{L}(w)=B\,\mathrm{diag}(w)\,B^\top$ is the weighted Laplacian and $b$ injects $+1$ at the
+source and $-1$ at the sink (grounded). Reinforcement $D_e\leftarrow D_e+\Delta t(|Q_e|-D_e)$
+iterates to the fixed point $D_e^\star=|Q_e^\star|$, at which a single sparse path survives.
+\paragraph{Selection and composition.} Node throughput $t_v=\tfrac12\sum_e|B_{v,e}||Q_e|$;
+per position $a_{k}=t^\gamma/\sum t^\gamma$. Walking the path, data nodes inject a value and
+expert nodes apply an MLP, giving function \emph{composition} (not a weighted average).
+\paragraph{Two guarantees.} $e\notin E\Rightarrow Q_e=0$ (legality by topology); and
+$\sum_{\text{in}}Q=\sum_{\text{out}}Q$ (conservation coupling).
+
+\section{Scalability: differentiating and solving the flow}\label{sec:scaling}
+The solve is one implicit layer $z^\star=F(z^\star,\theta)$ with $F(D)=|Q(D)|$. By the implicit
+function theorem, for cotangent $g=\partial\mathcal{J}/\partial z^\star$ the parameter gradient is
+$\partial\mathcal{J}/\partial\theta=(\partial F/\partial\theta)^\top u$ with $(I-(\partial F/\partial z)^\top)u=g$,
+solved matrix-free (VJP-only). This gives $O(E)$ backward memory independent of solver depth.
+We verify the implicit gradient against finite differences (cosine $1.0$, rel-err $\sim\!10^{-8}$)
+and against the exact Jacobian; a small conductance floor regularizes the otherwise-degenerate
+hard fixed point. A matrix-free conjugate-gradient forward solve (Laplacian-vector products from
+the edge list, $O(E)$/iter) replaces the dense $O(N^3)$ solve, matching it to $\sim\!10^{-3}$ and
+solving $N\!\approx\!2400$ neighborhoods in $\sim\!0.4$s.
+
+\section{Experiments}\label{sec:exp}
+\paragraph{Mechanism (synthetic).} A single optimal path emerges and alternatives wither; $14$
+redundant edges collapse to $2$; gradient through the fixed point re-routes the path.
+\paragraph{The legality wedge.} On a mixed data+compute task, Confluence attains illegal-hop rate
+$\approx\!0$ by construction while a PathMoE-style shared-router baseline attains the \emph{worst}
+legality under noise (illegal-hop $\approx\!0.5$): soft/param-sharing constraints can make legality
+worse, not just fail to guarantee it.
+\paragraph{MetaQA.} KG: 43{,}234 entities, 9 relations, 134{,}741 triples.
+Table~\ref{tab:metaqa} reports 2-hop hits@1 and illegal-hop rate.
+\begin{table}[h]\centering
+\begin{tabular}{lccc}
+\toprule
+Method & hits@1 & illegal-hop & notes \\
+\midrule
+Confluence (flow) & \TODO{full-dist} & $0$ (by construction) & degree-normalized decode \\
+No-flow ablation & \TODO{run} & $0$ (same topology) & isolates flow's contribution \\
+EmbedKGQA & \TODO{run} & \TODO{} & external anchor \\
+\bottomrule
+\end{tabular}
+\caption{MetaQA 2-hop. The no-flow ablation shares encoder, graph, and legality; only the
+conserved-flow solve differs, isolating whether the flow buys accuracy or only the guarantee.}
+\label{tab:metaqa}
+\end{table}
+
+\section{Related work}
+Each neighbor owns one ingredient; the conjunction is empty. PathMoE (path-constrained MoE,
+soft/statistical, weights only); Chain-of-Experts (sequential composition, learned router);
+GFlowNet-for-KG (flow sampling, not min-cost, data only); PathRAG (non-parametric flow pruning);
+D-RAG (differentiable subgraph \emph{set}); MoG (heuristic topology router); Physarum diff-LP
+layers (LPs, not expert routing). We concede the scooped \emph{outcomes} and claim the mechanism
+(flow-as-router), the hard input-conditional legality guarantee, and the retrieval/computation
+unification.
+
+\section{Limitations}
+The legality source is the KG (clean on KGQA, open where no native graph exists); $\gamma$ and the
+conductance floor are tuned (we report sensitivity); results so far are single-domain (movies) ---
+WebQSP/CWQ are needed for external validity.
+
+\end{document}
