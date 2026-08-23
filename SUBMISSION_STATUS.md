@@ -43,7 +43,7 @@ GFlowNet flow-over-DAG). Cite them; claim the mechanism + hard guarantee + unifi
 | Degree-norm retrain | `TRAIN_DEGNORM=1 python3 metaqa_confluence_2hop_v2.py` | Should push past 0.948; removes the eval-time-only asterisk |
 | Implicit-diff + lifted-cap run | `CAP=400 python3 metaqa_confluence_2hop_implicit.py` | Trains beyond the ≤80 subset with O(E)-memory backward |
 | Heavy-tail eval | eval path auto-uses matrix-free CG for N>500 | Decode the full 2-hop distribution → removes easier-subset bias |
-| EmbedKGQA baseline | (to build) | Credible external number + hallucination rate |
+| EmbedKGQA baseline | `python3 metaqa_embedkgqa_baseline.py` | ✅ built + self-check passes (ComplEx margin +8.7, hits@1 1.0); reports hits@1 **and** hallucination rate |
 
 > Data: `data/metaqa/{kb/kb.txt, 2-hop/qa_{train,test}.txt}` from HF mirror `camazlucas/MetaQA`
 > (official Google Drive is resourcekey-gated). `data/` is gitignored.
@@ -104,5 +104,6 @@ python3 implicit_diff.py                                   # implicit-diff corre
 python3 implicit_train_demo.py                             # end-to-end training at N>80, 0 illegal
 python3 metaqa_confluence_2hop_implicit.py --selfcheck     # MetaQA implicit-diff gradient vs FD
 python3 metaqa_confluence_2hop_implicit.py --scalecheck    # matrix-free forward vs dense + large-N
+python3 metaqa_embedkgqa_baseline.py --selfcheck           # ComplEx baseline scoring + training loop
 ```
 Requirements: Python 3, PyTorch, NumPy (Matplotlib for figures).
