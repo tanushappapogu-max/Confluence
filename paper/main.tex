@@ -137,19 +137,50 @@ answer outside the legal set.}
 \label{tab:metaqa}
 \end{table}
 
-\paragraph{Legality wedge.} On a mixed data+compute task the flow attains illegal-hop
-$\approx\!0$ by construction while a PathMoE-style \emph{shared-router} baseline attains the
-\emph{worst} legality under noise (illegal-hop $\approx\!0.5$): soft/param-sharing constraints can
-make legality worse, not merely fail to guarantee it.
+\paragraph{As an MoE router (coupled regime).} The same mechanism is a sparse expert router:
+the flow selects one legal \emph{path of experts} and composes them sequentially. On a constrained
+sequential expert-composition task (density $\approx\!0.6$, 4 seeds), the conserved flow beats both
+standard top-$k$ gating and Routing-Free MoE on accuracy and on legality (Table~\ref{tab:moe})---the
+coupled regime where Fig.~\ref{fig:coupling} predicts a win.
+\begin{table}[h]\centering
+\begin{tabular}{lcc}
+\toprule
+Router & held-out MSE $\downarrow$ & illegal-transition rate $\downarrow$ \\
+\midrule
+Top-$k$ gate (standard MoE) & $0.506\pm0.031$ & $0.295\pm0.021$ \\
+Routing-Free MoE & $0.583\pm0.024$ & $0.262\pm0.019$ \\
+Conserved flow (ours) & $\mathbf{0.392\pm0.026}$ & $\mathbf{0.103\pm0.007}$ \\
+\midrule
+oracle (upper bound) & $0.001$ & $0.000$ \\
+\bottomrule
+\end{tabular}
+\caption{Constrained sequential expert routing, 4 seeds (MSE / illegal-transition rate at noise
+$1.0$). The conserved-flow router beats top-$k$ gating and Routing-Free MoE on both, in the coupled
+regime. Illegal-transition rate is $0.000$ at lower noise for the flow.}
+\label{tab:moe}
+\end{table}
+
+\paragraph{Legality wedge.} A PathMoE-style \emph{shared-router} baseline (router params tied
+across steps) attains the \emph{worst} legality under noise (illegal-hop $\approx\!0.5$) versus the
+flow's $\approx\!0$: soft/param-sharing constraints can make legality worse, not merely fail to
+guarantee it---the safety argument for topology-enforced expert routing in deployed MoE.
 
 \section{Related work}
-Each neighbor owns one ingredient; the conjunction is empty. PathMoE (path-constrained MoE,
-soft/statistical, weights only); Chain-of-Experts (sequential composition, learned router);
-GFlowNet-for-KG (flow sampling, not min-cost, data only); PathRAG (non-parametric flow pruning);
-D-RAG (differentiable subgraph \emph{set}); MoG (heuristic topology router); Physarum diff-LP
-layers (LPs, not expert routing). We concede the scooped \emph{outcomes} and claim the mechanism
-(flow-as-router), the hard input-conditional legality guarantee, and the retrieval/computation
-unification.
+\paragraph{Sparse MoE routing.} Standard MoE uses a learned top-$k$ gate per layer, chosen
+\emph{independently}; load-balancing losses keep experts utilized. PathMoE constrains the path
+space by \emph{tying} router parameters across positions (a soft, statistical constraint);
+Chain-of-Experts composes experts sequentially with a learned per-step router; Routing-Free MoE
+drops the gate for threshold self-activation. All route by learned scores with no hard guarantee
+on which expert may follow which. Our router is a conserved flow whose \emph{topology} makes
+illegal expert transitions impossible, whose objective is a min-cost path (not a sampler), and
+which is differentiable and jointly trained; our contribution over these is (i) the hard,
+input-conditional legality guarantee and (ii) the \emph{condition} (coupling) under which such
+routing beats an independent gate.
+\paragraph{Flow / graph reasoning.} GFlowNet-for-KG (flow \emph{sampling}, not min-cost);
+PathRAG (non-parametric flow pruning); D-RAG (differentiable subgraph \emph{set}); MoG (heuristic
+topology router); Physarum diff-LP layers (LPs, not expert routing). We concede the scooped
+\emph{outcomes} (PathMoE's path-constraint benefits, CoE's sequential composition, GFlowNet's
+flow-over-DAG) and claim the mechanism, the guarantee, and the coupling condition.
 
 \section{Limitations}
 The flow's benefit is conditional: on marginalizable tasks it does not beat independent scoring, so
