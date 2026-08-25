@@ -1,0 +1,18 @@
+Running 4 seeds (fresh transition graph + data each)...
+
+  seed 11: 89 legal programs  | mycelial MSE@2.0=0.371  free MSE@2.0=0.590  mycelial illeg@1.0=0.11 free=0.29
+  seed 22: 88 legal programs  | mycelial MSE@2.0=0.367  free MSE@2.0=0.570  mycelial illeg@1.0=0.11 free=0.27
+  seed 33: 77 legal programs  | mycelial MSE@2.0=0.430  free MSE@2.0=0.617  mycelial illeg@1.0=0.10 free=0.24
+  seed 44: 70 legal programs  | mycelial MSE@2.0=0.400  free MSE@2.0=0.554  mycelial illeg@1.0=0.10 free=0.25
+
+=== MEAN ± STD over 4 seeds ===
+variant         MSE@3.0      MSE@2.0      MSE@1.0   illeg@3.0   illeg@2.0   illeg@1.0
+-------------------------------------------------------------------------------------
+oracle      0.001±0.000  0.001±0.000  0.001±0.000 0.000±0.000 0.000±0.000 0.000±0.000
+router      0.083±0.007  0.506±0.031  1.419±0.039 0.007±0.003 0.078±0.010 0.295±0.021
+free        0.158±0.003  0.583±0.024  1.319±0.049 0.008±0.004 0.073±0.011 0.262±0.019
+mycelial    0.054±0.007  0.392±0.026  1.246±0.051 0.000±0.000 0.012±0.002 0.103±0.007
+
+total 819s | held-out MSE on UNSEEN legal programs; illeg=illegal-transition rate (lower better)
+
+[exited with code 0]
