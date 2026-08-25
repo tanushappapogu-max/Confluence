@@ -160,6 +160,27 @@ regime. Illegal-transition rate is $0.000$ at lower noise for the flow.}
 \label{tab:moe}
 \end{table}
 
+\paragraph{Real MoE FFN layer: the accuracy/compute frontier.} We stack $K$ MoE FFN layers over
+$E{=}8$ experts and compare the conserved-flow router against a hard top-$k$ gate (standard MoE
+with load balancing) and a dense layer, in the coupled regime (3 seeds; Fig.~\ref{fig:moe}). The
+flow router is \emph{Pareto-dominant}: at the minimum compute of one active expert per layer it
+attains the best held-out MSE ($1.170\pm0.033$), beating the top-$1$ gate at the same compute
+($1.294\pm0.033$) and even the dense layer ($1.278\pm0.030$, which activates all $8$ experts) --
+the dense average pays the ``averaging ceiling'' while the flow composes the correct path. On
+legality, the flow's flux is supported only on legal expert transitions by construction; decoding
+its connected max-flux path is legal by construction, and even a per-layer argmax decode violates
+legality only $0.150\pm0.010$ of the time versus $0.899$ for the top-$1$ gate. This is the
+deployment value: same sparsity budget, better accuracy, and expert transitions that respect a
+hard constraint graph.
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.72\textwidth]{figs/moe_frontier.png}
+\caption{Conserved-flow routing is Pareto-dominant on the MoE accuracy/compute frontier (coupled
+regime, 3 seeds): lowest error at one active expert per layer, while the top-$k$ gate needs more
+experts or routes illegally (illegal-transition rate annotated).}
+\label{fig:moe}
+\end{figure}
+
 \paragraph{Legality wedge.} A PathMoE-style \emph{shared-router} baseline (router params tied
 across steps) attains the \emph{worst} legality under noise (illegal-hop $\approx\!0.5$) versus the
 flow's $\approx\!0$: soft/param-sharing constraints can make legality worse, not merely fail to

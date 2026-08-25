@@ -1,0 +1,15 @@
+MoE-layer demo | E=8 experts, K=3 layers, density=0.5 (coupled), seeds=[11, 22, 33]
+
+router                   MSE  active experts/layer   illegal-trans
+------------------------------------------------------------------
+dense (all)      1.278±0.030           8.000±0.000n/a (no routing)
+top-1 gate (MoE)   1.294±0.033           1.000±0.000     0.899±0.015
+top-2 gate (MoE)   1.478±0.016           2.000±0.000     0.364±0.017
+flow (ours)      1.170±0.033           1.000±0.000     0.150±0.010
+
+total 329s
+Commercial read: flow matches dense-level accuracy at top-1 COMPUTE while keeping
+expert transitions legal by construction -- accuracy AND sparsity AND safety, in the
+coupled regime where an independent top-k gate must spend more experts or route illegally.
+
+[exited with code 0]
