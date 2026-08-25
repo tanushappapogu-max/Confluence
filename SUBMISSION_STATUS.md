@@ -1,109 +1,65 @@
 # Confluence — Submission Readiness (ICLR)
 
-*Live status of what is done, what is verified, and the exact remaining path to submit.*
-*Companion to `passover.md` (full context) and `PAPER_NOTES.md` (results record).*
+*Live status. Companion to `passover.md` (context) and `PAPER_NOTES.md` (record).*
+*Framing (current): an MoE-routing paper — "When does conserved-flow routing help?"*
 
 ---
 
-## 1. The claim (what the paper argues)
+## 1. Thesis
+Route ONE differentiable, min-cost **conserved flow** through a per-query graph of expert (and
+optionally data) nodes whose edges are the legal transitions. It is a sparse **MoE router** that
+selects one legal path of experts. Contribution = a **mechanism + a condition for its use**:
+- **Coupling condition:** flow-routing beats an independent top-k gate **iff** reasoning steps are
+  coupled (mutually constraining); on marginalizable tasks they tie.
+- **Legality by topology:** flux is zero on illegal expert transitions by construction; the
+  connected-path decode is legal by construction (safety for deployed MoE).
+- **Cheap training at scale:** implicit differentiation + matrix-free solve (verified).
 
-Route ONE differentiable, min-cost **conserved flow** through a single graph whose nodes are
-**both** KB facts (data) and expert modules (computation), so a query is answered by one legal
-path that retrieves and computes at once — and **illegal reasoning steps are impossible by
-construction** (no edge where there is no triple).
-
-Two guarantees fall out of the mechanism and are the contribution:
-- **Legality by topology** — violations are impossible, not penalized (`e ∉ E ⇒ Q_e = 0`).
-- **Conservation coupling** — flow-in = flow-out couples consecutive steps.
-
-The novelty is the **conjunction** (flow-as-router + hard input-conditional legality +
-retrieval/computation unification); each neighbor owns only one ingredient. Do **not** claim the
-scooped outcomes (PathMoE path-constraint benefits; Chain-of-Experts sequential composition;
-GFlowNet flow-over-DAG). Cite them; claim the mechanism + hard guarantee + unification.
-
----
-
-## 2. Status ledger
-
-### Verified in-repo (reproducible, no external data)
-| Result | Where | Status |
+## 2. Results ledger (all real runs this session, on the branch)
+| Result | File / figure | Status |
 |---|---|---|
-| Flow mechanism: optimal path emerges, sparsifies, differentiable/trainable | `physarum_spike.py` | ✅ reproduced (short D≈1.0, long→0.001; 14→2 edges; grad re-routes 0.04→1.0) |
-| Constrained-routing win + PathMoE-lite worst-legality wedge | `confluence_spike.py` | ✅ reproduced (PathMoE-lite illegal 0.50 vs mycelial 0.10, lowest) |
-| **Implicit differentiation** through the flow fixed point | `implicit_diff.py` | ✅ **verified** vs finite-difference: cos 1.0, rel-err ~1e-8; memory flat in solver depth |
-| **Matrix-free** implicit gradient (VJP-only, no E×E Jacobian) | `implicit_diff.py` | ✅ matches exact + FD to ~1e-8; solves N=1000/E~3k where dense is infeasible |
-| End-to-end implicit-diff training at N>80, 0 illegal | `implicit_train_demo.py` | ✅ held-out hits@1 rises to ~9× chance, illegal-hop 0 throughout (existence result) |
-| Implicit-diff wired into MetaQA + CAP lifted 80→400 | `metaqa_confluence_2hop_implicit.py` | ✅ gradient self-check vs FD (rel-err ~1e-3) |
-| Matrix-free CG forward solve (heavy-tail eval) | `metaqa_confluence_2hop_implicit.py` | ✅ matches dense (~1e-3); N=2403/E~4.8k in ~0.4s |
+| Coupling crossover (flow vs independent, 3 seeds) | `results/density_sweep_flow_vs_independent.txt`, `paper/figs/coupling.png` | ✅ +0.159 (coupled) → −0.019 (unconstrained) |
+| MoE-routing win vs top-k gate + Routing-Free MoE (4 seeds) | `results/moe_routing_comparison_4seed.txt` | ✅ MSE 0.392 vs 0.506 / 0.583; illegal 0.10 vs 0.30 / 0.26 |
+| **MoE FFN-layer accuracy/compute frontier (3 seeds)** | `results/moe_layer_frontier_3seed.txt`, `paper/figs/moe_frontier.png` | ✅ flow Pareto-dominant: MSE 1.170 @ 1 expert/layer vs gate 1.294, dense 1.278 |
+| Legality wedge (PathMoE-lite worst) | `confluence_spike.py` | ✅ shared-router ~0.5 vs 0 |
+| MetaQA 2-hop no-flow ablation (real data, full) | `results/metaqa_2hop_noflow_ablation.txt` | ✅ no-flow 0.885/0.944 ≈ flow 0.864/0.948 — the predicted tie |
+| Implicit-diff correctness + scaling | `implicit_diff.py`, `paper/figs/implicit_diff.png` | ✅ vs finite-diff ~1e-8, memory-flat, matrix-free to N=1000 |
+| MetaQA implicit wiring + matrix-free forward | `metaqa_confluence_2hop_implicit.py` | ✅ gradient self-check ~1e-3; forward matches dense, N=2403 in 0.4s |
+| EmbedKGQA baseline (ComplEx) | `metaqa_embedkgqa_baseline.py` | ✅ built + self-check; run on data for external anchor + hallucination |
 
-### Data-gated (need MetaQA on a machine that can reach the dataset host)
-| Item | Command | Why it matters |
-|---|---|---|
-| No-flow ablation | `python3 metaqa_confluence_2hop_ablation.py` | **Decides the paper**: does the flow buy accuracy, or only the guarantee? |
-| Degree-norm retrain | `TRAIN_DEGNORM=1 python3 metaqa_confluence_2hop_v2.py` | Should push past 0.948; removes the eval-time-only asterisk |
-| Implicit-diff + lifted-cap run | `CAP=400 python3 metaqa_confluence_2hop_implicit.py` | Trains beyond the ≤80 subset with O(E)-memory backward |
-| Heavy-tail eval | eval path auto-uses matrix-free CG for N>500 | Decode the full 2-hop distribution → removes easier-subset bias |
-| EmbedKGQA baseline | `python3 metaqa_embedkgqa_baseline.py` | ✅ built + self-check passes (ComplEx margin +8.7, hits@1 1.0); reports hits@1 **and** hallucination rate |
+Data: full MetaQA (43,234 ent / 9 rel / 134,741 triples; 1/2/3-hop QA) staged locally in
+`data/metaqa/` (gitignored), sourced from a public GitHub mirror.
 
-> Data: `data/metaqa/{kb/kb.txt, 2-hop/qa_{train,test}.txt}` from HF mirror `camazlucas/MetaQA`
-> (official Google Drive is resourcekey-gated). `data/` is gitignored.
+## 3. Paper
+`paper/main.tex` — retitled "When Does Conserved-Flow Routing Help?", MoE-framed related work,
+coupling figure, MoE-routing table, MoE frontier figure, honest MetaQA tie table, scalability
+section + figure, limitations. Fill EmbedKGQA row from the data run.
 
----
+## 4. Reviewer-rebuttal map
+1. "Flow doesn't beat baselines" → it does in the coupled regime (Fig. coupling, MoE tables); the
+   MetaQA tie is the marginalizable endpoint we predict, not a failure.
+2. "Only synthetic MoE" → real MoE FFN layer frontier is honest but not an LM; next rung = MoE in a
+   small transformer on a real task (see §5). Stated as limitation.
+3. "Doesn't scale" → implicit-diff + matrix-free, verified; enables the coupled/deep regime.
+4. "Scooped (PathMoE/CoE)" → concede outcomes; claim mechanism + hard legality + coupling condition.
+5. "Legality really 0?" → flux/connected-path legal by construction; per-layer argmax decode 0.15
+   (still 6× below the gate). Stated precisely.
 
-## 3. Reviewer-rebuttal map (the attacks and the answer to each)
+## 5. Highest-impact remaining work (ranked)
+1. **Real MoE in a small transformer** on a real task (the rung that turns "primitive" into
+   "usable"; the commercial claim). Bigger infra build.
+2. 3-hop MetaQA as a real-data COUPLED instance (data staged; needs the scalable solver; a win
+   here is a real-data flow>no-flow result).
+3. EmbedKGQA run for the external anchor + hallucination contrast.
+4. Multi-seed everything + WebQSP/CWQ for external validity.
 
-1. **"0.948 is an uncompared number."**
-   → No-flow ablation (`metaqa_confluence_2hop_ablation.py`): identical encoder/graph/legality,
-   flow removed. Isolates the flow's contribution. Run it; report flow vs no-flow at matched setup.
-
-2. **"It's on the ≤80-node tractable subset — easier-question bias."**
-   → CAP lifted to 400 (training) and the **matrix-free CG forward** decodes the full tail at eval
-   (N=2403 in ~0.4s). Report accuracy on the full 2-hop distribution, not the subset.
-
-3. **"The flow is 16× a gate and O(N³) — doesn't scale."**
-   → Implicit differentiation (verified, memory-flat) removes the unrolled-backward cost;
-   matrix-free CG removes the dense forward. Both validated in `implicit_diff.py` /
-   `metaqa_confluence_2hop_implicit.py`. This is done code, not a promise.
-
-4. **"You were scooped (PathMoE / CoE / GFlowNet)."**
-   → Concede those outcomes explicitly; claim the conjunction + the hard input-conditional
-   legality guarantee. Killer fact: PathMoE-lite param-sharing gets the *worst* legality under
-   noise (illegal-hop ≈0.5) while topology gives 0.
-
-5. **"γ / RHO / hyperparameters are tuned."**
-   → Report γ-sensitivity; note the RHO conductance floor is a *principled* regularizer that makes
-   the fixed point non-degenerate (documented finding: the hard fixed point has a vanishing,
-   ill-conditioned gradient — the trainable signal lives in the regularized regime).
-
-6. **"Legality-by-construction depends on having a KG."**
-   → True and stated as a limitation; clean on KGQA (the KG *is* the legality source per query),
-   open in general. Add WebQSP/CWQ for external validity.
-
----
-
-## 4. Remaining work to submit (ranked)
-
-1. **[you, data]** Run items in §2 data-gated table; send numbers back.
-2. **[you, data]** Build EmbedKGQA baseline + a trained retrieval classifier (fair, not the broken one).
-3. **[either]** Multi-seed + variance bars on the MetaQA runs; freeze results.
-4. **[either]** WebQSP/CWQ for external validity (single-domain → multi-domain).
-5. **[writeup]** Draft around "Legality by Topology"; abstract, then paper.
-
-Contingency: if scaling/baselines stall, the fallback paper is "Legality by Topology" on the
-synthetic constrained-routing + Confluence-synthetic + MetaQA-1/2-hop results, now strengthened
-by the verified implicit-diff + matrix-free scaling infrastructure.
-
----
-
-## 5. One-command reproduction of what's verified here (no data)
-
-```bash
-python3 physarum_spike.py                                  # mechanism
-python3 confluence_spike.py                                # wedge (PathMoE-lite worst legality)
-python3 implicit_diff.py                                   # implicit-diff correctness + scaling
-python3 implicit_train_demo.py                             # end-to-end training at N>80, 0 illegal
-python3 metaqa_confluence_2hop_implicit.py --selfcheck     # MetaQA implicit-diff gradient vs FD
-python3 metaqa_confluence_2hop_implicit.py --scalecheck    # matrix-free forward vs dense + large-N
-python3 metaqa_embedkgqa_baseline.py --selfcheck           # ComplEx baseline scoring + training loop
+## 6. Reproduce (no external data)
 ```
-Requirements: Python 3, PyTorch, NumPy (Matplotlib for figures).
+python3 density_sweep.py        # coupling crossover
+python3 mycelial_final.py        # MoE-routing win (4 seeds)
+python3 moe_layer_demo.py        # MoE FFN-layer frontier (3 seeds)
+python3 confluence_spike.py      # legality wedge
+python3 implicit_diff.py         # implicit-diff correctness + scaling
+python3 metaqa_confluence_2hop_implicit.py --selfcheck   # MetaQA implicit gradient vs FD
+python3 metaqa_embedkgqa_baseline.py --selfcheck         # ComplEx baseline
+```
