@@ -1,0 +1,19 @@
+=== DENSITY 0.30 ===
+MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=0.3 (coupled), seeds=[0, 1]
+MAIN-TRACK READ: if flow acc > top-1 gate at equal compute (1 expert/layer) with lower
+=== DENSITY 0.50 ===
+MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=0.5 (coupled), seeds=[0, 1]
+top-1 gate       0.925±0.019   1.000±0.000 0.119±0.011
+flow (ours)      0.988±0.002   1.000±0.000 0.000±0.000
+MAIN-TRACK READ: if flow acc > top-1 gate at equal compute (1 expert/layer) with lower
+=== DENSITY 0.70 ===
+MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=0.7 (coupled), seeds=[0, 1]
+top-1 gate       0.907±0.019   1.000±0.000 0.075±0.019
+flow (ours)      0.982±0.002   1.000±0.000 0.001±0.000
+MAIN-TRACK READ: if flow acc > top-1 gate at equal compute (1 expert/layer) with lower
+=== DENSITY 1.00 ===
+MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=1.0 (coupled), seeds=[0, 1]
+top-1 gate       0.907±0.009   1.000±0.000 0.042±0.008
+flow (ours)      0.982±0.003   1.000±0.000 0.000±0.000
+MAIN-TRACK READ: if flow acc > top-1 gate at equal compute (1 expert/layer) with lower
+ALL DONE
