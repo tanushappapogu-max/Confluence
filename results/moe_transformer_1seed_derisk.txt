@@ -1,0 +1,17 @@
+   4d6f52d..39c9ccd  claude/passover-iclr-review-r7292c -> claude/passover-iclr-review-r7292c
+MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=0.5 (coupled), seeds=[0]
+
+  seed 0 done (93s)
+
+router             token acc  active/layer     illegal
+------------------------------------------------------
+dense (all)            0.106         6.000         n/a
+top-1 gate             0.912         1.000       0.094
+top-2 gate             0.977         2.000       0.007
+flow (ours)            0.983         1.000       0.000
+
+total 93s
+MAIN-TRACK READ: if flow acc > top-1 gate at equal compute (1 expert/layer) with lower
+illegal rate, the coupling win holds in a real trainable transformer -- the real result.
+
+[exited with code 0]
