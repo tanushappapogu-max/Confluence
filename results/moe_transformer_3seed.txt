@@ -1,0 +1,18 @@
+MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=0.5 (coupled), seeds=[0, 1, 2]
+
+  seed 0 done (395s)
+  seed 1 done (772s)
+  seed 2 done (1150s)
+
+router             token acc  active/layer     illegal
+------------------------------------------------------
+dense (all)      0.086±0.011   6.000±0.000         n/a
+top-1 gate       0.907±0.008   1.000±0.000 0.221±0.035
+top-2 gate       0.984±0.002   2.000±0.000 0.014±0.001
+flow (ours)      0.941±0.051   1.000±0.000 0.001±0.001
+
+total 1150s
+MAIN-TRACK READ: if flow acc > top-1 gate at equal compute (1 expert/layer) with lower
+illegal rate, the coupling win holds in a real trainable transformer -- the real result.
+
+[exited with code 0]
