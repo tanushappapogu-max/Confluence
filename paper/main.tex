@@ -16,22 +16,23 @@
 \maketitle
 
 \begin{abstract}
-We study routing a single differentiable, min-cost \emph{conserved flow} (a Tero--Nakagaki
-Physarum dynamic) through a per-query graph whose nodes are both knowledge-base facts and
-compute-experts and whose edges are exactly the legal transitions, so a query is answered by one
-connected legal path that retrieves and computes at once. The mechanism has two properties:
-\emph{legality by topology} (a constraint violation is impossible, not penalized, since there is
-no edge where there is no triple) and \emph{conservation coupling} (flow-in equals flow-out,
-tying consecutive steps to a shared budget). Our central question is not whether such routing is
-possible but \emph{when it helps}. We show, and explain, a crossover: on tasks whose answer is
-\emph{marginalizable} over intermediate steps---including MetaQA 2-hop, where a conserved-flow
-router \emph{ties} a plain per-step softmax over the same legal graph---the coupling buys nothing;
-but as reasoning steps become mutually constraining, the flow's advantage over independent per-step
-scoring grows monotonically and crosses zero. We characterize this boundary on a controlled
-constraint-density sweep, report the honest MetaQA tie, and give the machinery that makes the
-coupled regime tractable: implicit differentiation through the flow fixed point and a matrix-free
-solve, both verified to machine precision. The contribution is a mechanism and a \emph{condition
-for its use}, plus a hard 0-hallucination legality guarantee that holds throughout by construction.
+Mixture-of-Experts (MoE) models route each input through a few experts chosen by a learned gate,
+one layer at a time and independently. We ask when a \emph{coupled} router---one that commits to a
+single, globally consistent path of experts---is worth its cost. We study a conserved-flow router:
+a differentiable Tero--Nakagaki (Physarum) dynamic that relaxes to one min-cost path through a
+graph whose edges are exactly the legal expert transitions, so illegal routing is impossible by
+construction rather than merely penalized. Our central finding is a boundary condition. When a
+task's output \emph{marginalizes} over its intermediate steps---so each step can be scored
+independently---the coupling earns nothing: on MetaQA 2-hop knowledge-graph QA the flow router
+\emph{ties} a plain per-step softmax over the same legal graph. As the steps become mutually
+constraining, the flow's advantage over independent gating grows monotonically, a crossover we
+chart on a controlled constraint-density sweep; and in a real MoE transformer on a coupled
+compositional task the flow router matches or exceeds a standard top-$k$ gate at equal compute
+(one active expert per layer) while reducing the illegal-transition rate by orders of magnitude.
+We also give the machinery that makes this practical: implicit differentiation through the flow
+fixed point and a matrix-free solver, verified against finite differences. The contribution is a
+mechanism, a precise condition for its use, and a hard legality guarantee---not a new accuracy
+record.
 \end{abstract}
 
 \section{Introduction}
