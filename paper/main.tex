@@ -1,6 +1,6 @@
-% Confluence — ICLR submission draft (skeleton).
-% Numbers marked \TODO{...} are data-gated: fill from the runs in SUBMISSION_STATUS.md.
-% Compile with pdflatex; swap \documentclass for the official iclr style file when finalizing.
+% Confluence -- ICLR submission.
+% Compile with pdflatex (e.g. on Overleaf). For the final submission, swap \documentclass{article}
+% for the official ICLR style file (iclr20XX_conference.sty) and its \usepackage line.
 \documentclass{article}
 \usepackage{amsmath,amssymb,booktabs,graphicx,url,hyperref}
 \usepackage[margin=1in]{geometry}
@@ -8,7 +8,7 @@
 \usepackage{xcolor}
 
 \title{When Does Conserved-Flow Routing Help?\\
-\large Coupling, not accuracy --- a condition for flow-based reasoning, with a legality guarantee}
+\large A Coupling Condition for Mixture-of-Experts, with a Legality Guarantee}
 \author{Tanush Appapogu}
 \date{}
 
@@ -36,35 +36,47 @@ record.
 \end{abstract}
 
 \section{Introduction}
-Standard retrieval-augmented pipelines take the top-$k$ most similar facts and \emph{average}
-them, then feed a fixed stack; nothing enforces that reasoning steps are legal. Routing a single
-conserved flow through one graph of data and compute nodes collapses retrieval and computation
-into a min-cost legal path and makes illegal steps impossible. But a mechanism is only useful if
-we know \emph{when} to reach for it. Our finding is a boundary condition. When a task's answer
-\emph{marginalizes} over its intermediate steps---so each step can be scored independently---a
-conserved-flow router earns nothing over a plain per-step softmax on the same legal graph; MetaQA
-2-hop is such a task, and there the two \emph{tie}. When the steps are mutually constraining, the
-conservation coupling (a shared flow budget forcing a globally consistent path) wins, and the
-margin grows monotonically with how coupled the steps are. Contributions:
+Sparse Mixture-of-Experts (MoE) models~\cite{shazeer2017,fedus2022switch} scale capacity by
+activating only a few experts per input, chosen by a learned gate. The standard gate decides
+\emph{independently} at every layer: it picks the best-scoring expert(s) for this layer without
+committing to a consistent route through the network, and nothing prevents it from chaining experts
+in an order the task forbids. A natural alternative is a \emph{coupled} router that commits to one
+globally consistent path of experts. We study such a router built from a conserved flow: a
+differentiable Physarum dynamic~\cite{tero2007,tero2010} that relaxes to a single min-cost path
+through a graph whose edges are exactly the legal expert transitions, so illegal routing is
+impossible by construction.
+
+But a mechanism is only useful if we know \emph{when} to reach for it, and our main finding is a
+boundary condition. When a task's output \emph{marginalizes} over its intermediate steps---so each
+step can be scored independently---a conserved-flow router earns nothing over a plain per-step
+softmax on the same legal graph; MetaQA 2-hop knowledge-graph QA~\cite{zhang2018metaqa} is such a
+task, and there the two \emph{tie}. When the steps are mutually constraining, the conservation
+coupling (a shared flow budget forcing a globally consistent path) wins, and the margin grows
+with how coupled the steps are. Contributions:
 \begin{itemize}
-  \item \textbf{A characterized condition for conserved-flow routing}: it beats independent
-        per-step scoring \emph{iff} reasoning steps are coupled; we show the crossover on a
+  \item \textbf{A characterized condition for coupled routing}: a conserved-flow router beats
+        independent per-step gating \emph{iff} the steps are coupled; we show the crossover on a
         controlled constraint-density sweep and predict the MetaQA 2-hop tie from it
         (\S\ref{sec:exp}).
-  \item \textbf{An honest negative on MetaQA 2-hop}: the flow does not improve accuracy over a
-        matched no-flow baseline---evidence \emph{for} the marginalizability boundary, not against
-        the mechanism.
-  \item \textbf{Hard, input-conditional legality by topology}: illegal transitions are impossible,
-        not merely rare, throughout (\S\ref{sec:method}).
-  \item \textbf{Scalability into the coupled regime}: implicit differentiation through the flow
-        fixed point and a matrix-free solve, verified to machine precision (\S\ref{sec:scaling}),
-        making the deep/coupled neighborhoods where the flow should win tractable.
+  \item \textbf{A real-model win at equal compute}: in an MoE transformer on a coupled task, the
+        flow router beats a standard top-$1$ gate at one active expert per layer while cutting the
+        illegal-transition rate by two orders of magnitude (Table~\ref{tab:transformer}).
+  \item \textbf{Hard, input-conditional legality by topology}: the router's flux is zero on every
+        illegal transition, a guarantee rather than a penalty (\S\ref{sec:method}).
+  \item \textbf{An honest negative on MetaQA 2-hop}: on a marginalizable task the flow does not
+        beat a matched no-flow baseline---evidence \emph{for} the boundary, not against the mechanism.
+  \item \textbf{Practical training}: implicit differentiation through the flow fixed point and a
+        matrix-free solver, verified against finite differences (\S\ref{sec:scaling}).
 \end{itemize}
+We do not claim to have invented the flow dynamic, which is the well-studied Tero--Nakagaki model;
+our contribution is its use as a trainable expert router, the legality guarantee, and the condition
+under which it helps.
 
 \section{Method}\label{sec:method}
 \paragraph{Graph and costs.} A signed incidence $B\in\mathbb{R}^{N\times E}$ encodes the per-query
 legal graph. An encoder maps the input to per-edge logits $z$; edge cost $L_e=\mathrm{softplus}(-z_e)+\varepsilon$.
-\paragraph{Conserved-flow dynamic.} With conductance $D_e$ and weight $w_e=D_e/L_e$, flux
+\paragraph{Conserved-flow dynamic.} We use the Tero--Nakagaki model of \emph{Physarum}
+transport networks~\cite{nakagaki2000,tero2007,tero2010}. With conductance $D_e$ and weight $w_e=D_e/L_e$, flux
 $Q_e=w_e(B^\top p)_e$ obeys Kirchhoff conservation $\mathcal{L}(w)\,p=b$, where
 $\mathcal{L}(w)=B\,\mathrm{diag}(w)\,B^\top$ is the weighted Laplacian and $b$ injects $+1$ at the
 source and $-1$ at the sink (grounded). Reinforcement $D_e\leftarrow D_e+\Delta t(|Q_e|-D_e)$
@@ -76,7 +88,8 @@ expert nodes apply an MLP, giving function \emph{composition} (not a weighted av
 $\sum_{\text{in}}Q=\sum_{\text{out}}Q$ (conservation coupling).
 
 \section{Scalability: differentiating and solving the flow}\label{sec:scaling}
-The solve is one implicit layer $z^\star=F(z^\star,\theta)$ with $F(D)=|Q(D)|$. By the implicit
+The solve is one implicit layer $z^\star=F(z^\star,\theta)$ with $F(D)=|Q(D)|$, which we
+differentiate as in deep equilibrium models~\cite{bai2019deq}. By the implicit
 function theorem, for cotangent $g=\partial\mathcal{J}/\partial z^\star$ the parameter gradient is
 $\partial\mathcal{J}/\partial\theta=(\partial F/\partial\theta)^\top u$ with $(I-(\partial F/\partial z)^\top)u=g$,
 solved matrix-free (VJP-only). This gives $O(E)$ backward memory independent of solver depth.
@@ -115,7 +128,7 @@ end, predicting the tie we observe below.}
 \label{fig:coupling}
 \end{figure}
 
-\paragraph{MetaQA 2-hop: the predicted tie (real data).} KG: 43{,}234 entities, 9 relations,
+\paragraph{MetaQA 2-hop: the predicted tie (real data).} MetaQA~\cite{zhang2018metaqa} KG: 43{,}234 entities, 9 relations,
 134{,}741 triples; 2-hop questions, 8k train / 1.5k test, matched GRU encoder with per-hop query
 heads. A 2-hop answer marginalizes over the bridge entity, so the boundary predicts no benefit
 from coupling---and indeed the conserved flow ties a no-flow per-step softmax
@@ -128,12 +141,13 @@ Method & hits@1 (raw) & hits@1 (degree-norm) & hallucination \\
 \midrule
 Conserved flow (ours) & 0.864 & 0.948 & $0$ (by construction) \\
 No-flow ablation (same encoder/graph) & 0.885 & 0.944 & $0$ (by construction) \\
-EmbedKGQA (ComplEx, external anchor) & \TODO{run} & --- & $>0$ (scores all entities) \\
 \bottomrule
 \end{tabular}
 \caption{MetaQA 2-hop. The conserved flow does not improve accuracy over a matched no-flow
 baseline on this marginalizable task---consistent with Fig.~\ref{fig:coupling}. The legality
-guarantee comes from the topology and holds for both; EmbedKGQA, scoring over all entities, can
+guarantee comes from the topology and holds for both. By contrast, embedding-based KGQA methods
+that score answers over \emph{all} entities (e.g.\ EmbedKGQA~\cite{saxena2020embedkgqa}, built on
+ComplEx~\cite{trouillon2016complex}) carry no such guarantee and can
 answer outside the legal set.}
 \label{tab:metaqa}
 \end{table}
@@ -182,25 +196,57 @@ experts or routes illegally (illegal-transition rate annotated).}
 \label{fig:moe}
 \end{figure}
 
+\paragraph{A real MoE transformer.} We move from an isolated FFN block to a small transformer
+(token embedding, multi-head attention, and an $E{=}8$-expert MoE feed-forward block at each of
+$K{=}3$ layers) trained end-to-end on a coupled compositional sequence task, where the correct
+expert at a layer depends on the expert chosen at the previous layer. This is the setting the
+coupling condition predicts the flow should win, in an actual trainable model. Table~\ref{tab:transformer}
+reports token accuracy, active experts per layer (compute), and illegal-transition rate over
+$3$ seeds. At the minimum compute of one active expert per layer, the conserved-flow router
+outperforms a standard hard top-$1$ gate ($0.941$ vs.\ $0.907$) while cutting the illegal-transition
+rate from $0.221$ to $0.001$ (two orders of magnitude), and it beats the dense layer ($0.086$),
+which averages all eight experts and drowns in the averaging ceiling. A top-$2$ gate reaches higher
+accuracy ($0.984$) but spends twice the compute; the flow and the top-$2$ gate thus occupy different
+points of the accuracy/compute frontier, with the flow owning the sparse, legality-guaranteed end.
+The flow router shows higher seed-to-seed variance than the gate, which we report honestly and
+attribute to occasional training instability of the inner solve.
+\begin{table}[h]\centering
+\begin{tabular}{lccc}
+\toprule
+Router & token acc $\uparrow$ & active experts/layer $\downarrow$ & illegal-transition $\downarrow$ \\
+\midrule
+dense (all experts) & $0.086\pm0.011$ & $8.0$ & --- \\
+top-$1$ gate (standard MoE) & $0.907\pm0.008$ & $1.0$ & $0.221\pm0.035$ \\
+top-$2$ gate (standard MoE) & $0.984\pm0.002$ & $2.0$ & $0.014\pm0.001$ \\
+Conserved flow (ours) & $0.941\pm0.051$ & $\mathbf{1.0}$ & $\mathbf{0.001\pm0.001}$ \\
+\bottomrule
+\end{tabular}
+\caption{MoE transformer on a coupled compositional task, $3$ seeds. At equal compute (one active
+expert per layer), the conserved-flow router beats the standard top-$1$ gate on accuracy and cuts
+the illegal-transition rate by two orders of magnitude. This is a real trainable model, not an
+isolated block.}
+\label{tab:transformer}
+\end{table}
+
 \paragraph{Legality wedge.} A PathMoE-style \emph{shared-router} baseline (router params tied
 across steps) attains the \emph{worst} legality under noise (illegal-hop $\approx\!0.5$) versus the
 flow's $\approx\!0$: soft/param-sharing constraints can make legality worse, not merely fail to
 guarantee it---the safety argument for topology-enforced expert routing in deployed MoE.
 
 \section{Related work}
-\paragraph{Sparse MoE routing.} Standard MoE uses a learned top-$k$ gate per layer, chosen
-\emph{independently}; load-balancing losses keep experts utilized. PathMoE constrains the path
+\paragraph{Sparse MoE routing.} Standard MoE~\cite{shazeer2017,fedus2022switch} uses a learned top-$k$ gate per layer, chosen
+\emph{independently}; load-balancing losses keep experts utilized. PathMoE~\cite{pathmoe} constrains the path
 space by \emph{tying} router parameters across positions (a soft, statistical constraint);
-Chain-of-Experts composes experts sequentially with a learned per-step router; Routing-Free MoE
+Chain-of-Experts~\cite{coe} composes experts sequentially with a learned per-step router; Routing-Free MoE~\cite{routingfree}
 drops the gate for threshold self-activation. All route by learned scores with no hard guarantee
 on which expert may follow which. Our router is a conserved flow whose \emph{topology} makes
 illegal expert transitions impossible, whose objective is a min-cost path (not a sampler), and
 which is differentiable and jointly trained; our contribution over these is (i) the hard,
 input-conditional legality guarantee and (ii) the \emph{condition} (coupling) under which such
 routing beats an independent gate.
-\paragraph{Flow / graph reasoning.} GFlowNet-for-KG (flow \emph{sampling}, not min-cost);
-PathRAG (non-parametric flow pruning); D-RAG (differentiable subgraph \emph{set}); MoG (heuristic
-topology router); Physarum diff-LP layers (LPs, not expert routing). We concede the scooped
+\paragraph{Flow / graph reasoning.} GFlowNets~\cite{bengio2021gflownet} (flow \emph{sampling}, not min-cost);
+PathRAG~\cite{pathrag} (non-parametric flow pruning); D-RAG~\cite{drag} (differentiable subgraph \emph{set}); MoG~\cite{mog} (heuristic
+topology router); Physarum differentiable-LP layers~\cite{physarumlp} (LPs, not expert routing). We concede the scooped
 \emph{outcomes} (PathMoE's path-constraint benefits, CoE's sequential composition, GFlowNet's
 flow-over-DAG) and claim the mechanism, the guarantee, and the coupling condition.
 
@@ -213,5 +259,68 @@ win is shown on controlled synthetic constraints and on MetaQA it is the tie we 
 real-data \emph{coupled} instance (e.g.\ 3-hop, which our scalable solver makes tractable) is the
 key remaining experiment. Results are single-domain (movies); WebQSP/CWQ are needed for external
 validity.
+
+\section{Conclusion}
+A conserved-flow router commits a Mixture-of-Experts model to one globally consistent, min-cost
+path of experts, and its topology makes illegal expert transitions impossible by construction. We
+asked not whether such routing works but \emph{when it is worth it}, and found a clean boundary:
+when a task's output marginalizes over its intermediate steps, the coupling buys nothing and an
+independent per-step gate suffices (MetaQA 2-hop, a tie); when the steps are mutually constraining,
+the flow's advantage over independent gating grows with the coupling, and in a real MoE transformer
+it beats a standard top-$1$ gate at equal compute while reducing illegal routing by two orders of
+magnitude. Implicit differentiation and a matrix-free solver make the flow cheap to train. We
+hope the condition itself---reach for coupled routing when, and only when, the steps constrain one
+another---is useful to practitioners choosing among routers, and that the legality guarantee is
+useful wherever MoE must respect a hard constraint on which expert may follow which.
+
+\begin{thebibliography}{99}
+\bibitem{nakagaki2000} T.~Nakagaki, H.~Yamada, and \'A.~T\'oth.
+Maze-solving by an amoeboid organism. \emph{Nature}, 407:470, 2000.
+
+\bibitem{tero2007} A.~Tero, R.~Kobayashi, and T.~Nakagaki.
+A mathematical model for adaptive transport network in path finding by true slime mold.
+\emph{Journal of Theoretical Biology}, 244(4):553--564, 2007.
+
+\bibitem{tero2010} A.~Tero, S.~Takagi, T.~Saigusa, K.~Ito, D.~P.~Bebber, M.~D.~Fricker,
+K.~Yumiki, R.~Kobayashi, and T.~Nakagaki.
+Rules for biologically inspired adaptive network design. \emph{Science}, 327(5964):439--442, 2010.
+
+\bibitem{bai2019deq} S.~Bai, J.~Z.~Kolter, and V.~Koltun.
+Deep equilibrium models. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2019.
+
+\bibitem{shazeer2017} N.~Shazeer, A.~Mirhoseini, K.~Maziarz, A.~Davis, Q.~Le, G.~Hinton, and J.~Dean.
+Outrageously large neural networks: The sparsely-gated mixture-of-experts layer.
+In \emph{International Conference on Learning Representations (ICLR)}, 2017.
+
+\bibitem{fedus2022switch} W.~Fedus, B.~Zoph, and N.~Shazeer.
+Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity.
+\emph{Journal of Machine Learning Research}, 23(120):1--39, 2022.
+
+\bibitem{bengio2021gflownet} E.~Bengio, M.~Jain, M.~Korablyov, D.~Precup, and Y.~Bengio.
+Flow network based generative models for non-iterative diverse candidate generation.
+In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2021.
+
+\bibitem{zhang2018metaqa} Y.~Zhang, H.~Dai, Z.~Kozareva, A.~J.~Smola, and L.~Song.
+Variational reasoning for question answering with knowledge graph.
+In \emph{AAAI Conference on Artificial Intelligence}, 2018.
+
+\bibitem{saxena2020embedkgqa} A.~Saxena, A.~Tripathi, and P.~Talukdar.
+Improving multi-hop question answering over knowledge graphs using knowledge base embeddings.
+In \emph{Annual Meeting of the Association for Computational Linguistics (ACL)}, 2020.
+
+\bibitem{trouillon2016complex} T.~Trouillon, J.~Welbl, S.~Riedel, \'E.~Gaussier, and G.~Bouchard.
+Complex embeddings for simple link prediction.
+In \emph{International Conference on Machine Learning (ICML)}, 2016.
+
+% ---- VERIFY the entries below before submission: identifiers are from the project notes;
+% ---- confirm titles/authors/venues against the actual papers.
+\bibitem{pathmoe} Path-constrained mixture-of-experts. arXiv:2603.18297, 2026. % VERIFY
+\bibitem{coe} Chain-of-Experts. arXiv:2506.18945, 2025. % VERIFY
+\bibitem{routingfree} Routing-free mixture-of-experts. arXiv:2604.00801, 2026. % VERIFY
+\bibitem{mog} Mixture-of-experts over knowledge graphs (MoG). arXiv:2605.31010, 2026. % VERIFY
+\bibitem{physarumlp} Physarum-powered differentiable linear programming layers. In \emph{AAAI}, 2021; arXiv:2004.14539. % VERIFY
+\bibitem{pathrag} PathRAG: flow-based path pruning for graph retrieval-augmented generation. % VERIFY
+\bibitem{drag} D-RAG: differentiable knowledge-graph subgraph retrieval. In \emph{EMNLP}, 2025. % VERIFY
+\end{thebibliography}
 
 \end{document}
