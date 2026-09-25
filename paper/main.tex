@@ -197,7 +197,7 @@ experts or routes illegally (illegal-transition rate annotated).}
 \end{figure}
 
 \paragraph{A real MoE transformer.} We move from an isolated FFN block to a small transformer
-(token embedding, multi-head attention, and an $E{=}8$-expert MoE feed-forward block at each of
+(token embedding, multi-head attention, and an $E{=}6$-expert MoE feed-forward block at each of
 $K{=}3$ layers) trained end-to-end on a coupled compositional sequence task, where the correct
 expert at a layer depends on the expert chosen at the previous layer. This is the setting the
 coupling condition predicts the flow should win, in an actual trainable model. Table~\ref{tab:transformer}
@@ -205,7 +205,7 @@ reports token accuracy, active experts per layer (compute), and illegal-transiti
 $3$ seeds. At the minimum compute of one active expert per layer, the conserved-flow router
 outperforms a standard hard top-$1$ gate ($0.941$ vs.\ $0.907$) while cutting the illegal-transition
 rate from $0.221$ to $0.001$ (two orders of magnitude), and it beats the dense layer ($0.086$),
-which averages all eight experts and drowns in the averaging ceiling. A top-$2$ gate reaches higher
+which averages all six experts and drowns in the averaging ceiling. A top-$2$ gate reaches higher
 accuracy ($0.984$) but spends twice the compute; the flow and the top-$2$ gate thus occupy different
 points of the accuracy/compute frontier, with the flow owning the sparse, legality-guaranteed end.
 The flow router shows higher seed-to-seed variance than the gate, which we report honestly and
@@ -215,7 +215,7 @@ attribute to occasional training instability of the inner solve.
 \toprule
 Router & token acc $\uparrow$ & active experts/layer $\downarrow$ & illegal-transition $\downarrow$ \\
 \midrule
-dense (all experts) & $0.086\pm0.011$ & $8.0$ & --- \\
+dense (all experts) & $0.086\pm0.011$ & $6.0$ & --- \\
 top-$1$ gate (standard MoE) & $0.907\pm0.008$ & $1.0$ & $0.221\pm0.035$ \\
 top-$2$ gate (standard MoE) & $0.984\pm0.002$ & $2.0$ & $0.014\pm0.001$ \\
 Conserved flow (ours) & $0.941\pm0.051$ & $\mathbf{1.0}$ & $\mathbf{0.001\pm0.001}$ \\
