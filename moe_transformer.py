@@ -30,7 +30,8 @@ BATCH = int(os.environ.get("BATCH", "128"))
 EPOCHS = int(os.environ.get("EPOCHS", "2" if SMOKE else "12"))
 PH_STEPS = int(os.environ.get("PH_STEPS", "10" if SMOKE else "18"))
 DENSITY = float(os.environ.get("DENSITY", "0.5"))   # expert-transition legality density (coupled regime)
-SEEDS = list(range(int(os.environ.get("NSEEDS", "1" if SMOKE else "3"))))
+SEED_START = int(os.environ.get("SEED_START", "0"))
+SEEDS = list(range(SEED_START, SEED_START + int(os.environ.get("NSEEDS", "1" if SMOKE else "3"))))
 
 
 def make_task(seed):
