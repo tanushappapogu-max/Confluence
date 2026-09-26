@@ -12,12 +12,13 @@
 \usepackage{amsmath,amssymb,booktabs,graphicx}
 \usepackage{xcolor}
 
-% Paper color scheme -- identical hex values to figstyle.py (used by every figure).
-\definecolor{flowblue}{HTML}{2A78D6}    % ours: conserved flow
-\definecolor{baseorange}{HTML}{EB6834}  % main baseline: top-1 gate / independent softmax
-\definecolor{baseaqua}{HTML}{1BAF7A}    % secondary baseline: top-2 gate
+% Paper color scheme (forest-green theme, coral contrast) -- identical hex values to figstyle.py.
+\definecolor{forestdark}{HTML}{0F3D2E}  % headings / ink
+\definecolor{forest}{HTML}{166534}      % ours: conserved flow
+\definecolor{coral}{HTML}{F4978E}       % main baseline: top-1 gate / independent softmax
+\definecolor{lime}{HTML}{84A311}        % secondary baseline: top-2 gate
 \definecolor{neutralgray}{HTML}{8A8984} % dense / reference
-\hypersetup{colorlinks=true, linkcolor=flowblue, citecolor=flowblue, urlcolor=flowblue}
+\hypersetup{colorlinks=true, linkcolor=forest, citecolor=forest, urlcolor=forest}
 
 \title{\raggedright When Does Conserved-Flow Routing Help? \\ A Coupling Condition for \mbox{Mixture-of-Experts}, with a Legality Guarantee}
 
@@ -69,7 +70,7 @@ step can be scored independently---a conserved-flow router earns nothing over a 
 softmax on the same legal graph; MetaQA 2-hop knowledge-graph QA~\citep{zhang2018metaqa} is such a
 task, and there the two \emph{tie}. When the steps are mutually constraining, the conservation
 coupling (a shared flow budget forcing a globally consistent path) wins, and the margin grows
-with how coupled the steps are. Contributions:
+with how coupled the steps are (Fig.~\ref{fig:method}). Contributions:
 \begin{itemize}
   \item \textbf{A characterized condition for coupled routing}: a conserved-flow router beats
         independent per-step gating \emph{iff} the steps are coupled; we show the crossover on a
@@ -88,6 +89,18 @@ with how coupled the steps are. Contributions:
 We do not claim to have invented the flow dynamic, which is the well-studied Tero--Nakagaki model;
 our contribution is its use as a trainable expert router, the legality guarantee, and the condition
 under which it helps.
+
+\begin{figure}[t]\centering
+\includegraphics[width=\textwidth]{figs/method.pdf}
+\caption{\textbf{Overview.} (A) Each input defines a graph whose edges are exactly the legal expert
+transitions; an illegal transition has no edge. (B) A conserved Physarum flow over this graph relaxes to
+one sparse min-cost path. (C) The model applies the experts on that path in sequence, whereas a standard
+top-$k$ gate picks each layer independently and can chain experts illegally. (D) The flow is trained end
+to end by implicit differentiation through its fixed point. (E) The coupling condition: the flow beats an
+independent gate when steps constrain each other and ties when the output marginalizes over them (inset:
+measured advantage vs.\ legal-transition density, Fig.~\ref{fig:coupling}). (F) Testbeds and metrics.}
+\label{fig:method}
+\end{figure}
 
 \section{Method}\label{sec:method}
 \paragraph{Graph and costs.} A signed incidence $B\in\mathbb{R}^{N\times E}$ encodes the per-query
@@ -291,7 +304,6 @@ another---is useful to practitioners choosing among routers, and that the legali
 useful wherever MoE must respect a hard constraint on which expert may follow which.
 
 
-% Methods/pipeline figure goes here (Fig. 1) once drawn -- see figstyle.py for the palette.
 
 \subsection*{AI use statement}
 % EDIT THIS so it matches exactly what you did. ICLR requires it; it does not count toward the page limit.

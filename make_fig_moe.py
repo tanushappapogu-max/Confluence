@@ -18,7 +18,8 @@ pts = [
 
 fig, ax = plt.subplots(figsize=(3.5, 2.7))
 for x, y, e, ill, label, c, (dx, dy), ha in pts:
-    ax.errorbar(x, y, yerr=e, fmt="o", ms=7, color=c, capsize=2.5, zorder=3, mec="white", mew=1.2)
+    mk = "o" if "ours" in label else "s" if "top-1" in label else "^" if "top-2" in label else "D"
+    ax.errorbar(x, y, yerr=e, fmt=mk, ms=7, color=c, capsize=2.5, zorder=3, mec="white", mew=1.2)
     tag = label + (f"\nillegal {ill:.2f}" if ill is not None else "")
     ax.text(x + dx, y + dy, tag, fontsize=7.5, color=INK2, va="center", ha=ha)
 ax.set_xlabel("active experts per layer (compute)")
