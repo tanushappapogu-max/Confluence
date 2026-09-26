@@ -1,4 +1,3 @@
-   4d6f52d..39c9ccd  claude/passover-iclr-review-r7292c -> claude/passover-iclr-review-r7292c
 MoE-transformer | device=cpu | E=6 experts, K=3 MoE layers, L=6, density=0.5 (coupled), seeds=[0]
 
   seed 0 done (93s)
