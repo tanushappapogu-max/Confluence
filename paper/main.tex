@@ -46,7 +46,7 @@ independently---the coupling earns nothing: on MetaQA 2-hop knowledge-graph QA t
 \emph{ties} a plain per-step softmax over the same legal graph. As the steps become mutually
 constraining, the flow's advantage over independent gating grows monotonically, a crossover we
 chart on a controlled constraint-density sweep. In a small MoE transformer on a coupled
-compositional task, the flow router cuts the illegal-transition rate from $0.36$ to $0.01$ at one
+compositional task, the flow router cuts the illegal-transition rate from $0.34$ to $0.01$ at one
 dominant expert per layer; its accuracy reaches $0.99$ on some seeds but is unstable across seeds and
 below a top-$1$ gate on average, which we report seed by seed.
 We also give the machinery that makes this practical: implicit differentiation through the flow
@@ -250,7 +250,8 @@ entirely, so its mean ($\tfFlowMean$; median $\tfFlowMed$) is below the gate's. 
 instability of the inner solve early in training, when edge costs are near-uniform and the
 reinforcement dynamic can lock onto a wrong path; stabilizing it (for example by annealing the
 conductance floor or the sharpening exponent $\gamma$) is the most important open problem for this
-router. The top-$2$ gate is similarly unstable at this scale, and the dense layer, which averages all
+router. The gates are not stable at this scale either (top-$1$ falls to $0.45$ on one seed and
+top-$2$ ranges from $0.11$ to $0.99$), and the dense layer, which averages all
 six experts, fails on this compositional task.
 
 \begin{figure}[t]\centering
