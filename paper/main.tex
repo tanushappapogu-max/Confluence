@@ -1,18 +1,35 @@
-% Confluence -- ICLR submission.
-% Compile with pdflatex (e.g. on Overleaf). For the final submission, swap \documentclass{article}
-% for the official ICLR style file (iclr20XX_conference.sty) and its \usepackage line.
-\documentclass{article}
-\usepackage{amsmath,amssymb,booktabs,graphicx,url,hyperref}
-\usepackage[margin=1in]{geometry}
-\newcommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO: #1]}}}
+% Confluence -- ICLR 2027 submission (official ICLR 2027 template).
+% Overleaf: upload this whole paper/ folder (main.tex, references.bib, the .sty/.bst files,
+% math_commands.tex, figs/) and set main.tex as the main document. Compiler: pdfLaTeX.
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2027_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{amsmath,amssymb,booktabs,graphicx}
 \usepackage{xcolor}
 
-\title{When Does Conserved-Flow Routing Help?\\
-\large A Coupling Condition for Mixture-of-Experts, with a Legality Guarantee}
-\author{Tanush Appapogu}
-\date{}
+% Paper color scheme -- identical hex values to figstyle.py (used by every figure).
+\definecolor{flowblue}{HTML}{2A78D6}    % ours: conserved flow
+\definecolor{baseorange}{HTML}{EB6834}  % main baseline: top-1 gate / independent softmax
+\definecolor{baseaqua}{HTML}{1BAF7A}    % secondary baseline: top-2 gate
+\definecolor{neutralgray}{HTML}{8A8984} % dense / reference
+\hypersetup{colorlinks=true, linkcolor=flowblue, citecolor=flowblue, urlcolor=flowblue}
 
+\title{\raggedright When Does Conserved-Flow Routing Help? \\ A Coupling Condition for \mbox{Mixture-of-Experts}, with a Legality Guarantee}
+
+% Hidden in the submitted version (anonymous while \iclrfinalcopy is commented out).
+\author{Tanush Appapogu}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+%\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
 \begin{document}
+
 \maketitle
 
 \begin{abstract}
@@ -36,20 +53,20 @@ record.
 \end{abstract}
 
 \section{Introduction}
-Sparse Mixture-of-Experts (MoE) models~\cite{shazeer2017,fedus2022switch} scale capacity by
+Sparse Mixture-of-Experts (MoE) models~\citep{shazeer2017,fedus2022switch} scale capacity by
 activating only a few experts per input, chosen by a learned gate. The standard gate decides
 \emph{independently} at every layer: it picks the best-scoring expert(s) for this layer without
 committing to a consistent route through the network, and nothing prevents it from chaining experts
 in an order the task forbids. A natural alternative is a \emph{coupled} router that commits to one
 globally consistent path of experts. We study such a router built from a conserved flow: a
-differentiable Physarum dynamic~\cite{tero2007,tero2010} that relaxes to a single min-cost path
+differentiable Physarum dynamic~\citep{tero2007,tero2010} that relaxes to a single min-cost path
 through a graph whose edges are exactly the legal expert transitions, so illegal routing is
 impossible by construction.
 
 But a mechanism is only useful if we know \emph{when} to reach for it, and our main finding is a
 boundary condition. When a task's output \emph{marginalizes} over its intermediate steps---so each
 step can be scored independently---a conserved-flow router earns nothing over a plain per-step
-softmax on the same legal graph; MetaQA 2-hop knowledge-graph QA~\cite{zhang2018metaqa} is such a
+softmax on the same legal graph; MetaQA 2-hop knowledge-graph QA~\citep{zhang2018metaqa} is such a
 task, and there the two \emph{tie}. When the steps are mutually constraining, the conservation
 coupling (a shared flow budget forcing a globally consistent path) wins, and the margin grows
 with how coupled the steps are. Contributions:
@@ -76,7 +93,7 @@ under which it helps.
 \paragraph{Graph and costs.} A signed incidence $B\in\mathbb{R}^{N\times E}$ encodes the per-query
 legal graph. An encoder maps the input to per-edge logits $z$; edge cost $L_e=\mathrm{softplus}(-z_e)+\varepsilon$.
 \paragraph{Conserved-flow dynamic.} We use the Tero--Nakagaki model of \emph{Physarum}
-transport networks~\cite{nakagaki2000,tero2007,tero2010}. With conductance $D_e$ and weight $w_e=D_e/L_e$, flux
+transport networks~\citep{nakagaki2000,tero2007,tero2010}. With conductance $D_e$ and weight $w_e=D_e/L_e$, flux
 $Q_e=w_e(B^\top p)_e$ obeys Kirchhoff conservation $\mathcal{L}(w)\,p=b$, where
 $\mathcal{L}(w)=B\,\mathrm{diag}(w)\,B^\top$ is the weighted Laplacian and $b$ injects $+1$ at the
 source and $-1$ at the sink (grounded). Reinforcement $D_e\leftarrow D_e+\Delta t(|Q_e|-D_e)$
@@ -89,7 +106,7 @@ $\sum_{\text{in}}Q=\sum_{\text{out}}Q$ (conservation coupling).
 
 \section{Scalability: differentiating and solving the flow}\label{sec:scaling}
 The solve is one implicit layer $z^\star=F(z^\star,\theta)$ with $F(D)=|Q(D)|$, which we
-differentiate as in deep equilibrium models~\cite{bai2019deq}. By the implicit
+differentiate as in deep equilibrium models~\citep{bai2019deq}. By the implicit
 function theorem, for cotangent $g=\partial\mathcal{J}/\partial z^\star$ the parameter gradient is
 $\partial\mathcal{J}/\partial\theta=(\partial F/\partial\theta)^\top u$ with $(I-(\partial F/\partial z)^\top)u=g$,
 solved matrix-free (VJP-only). This gives $O(E)$ backward memory independent of solver depth.
@@ -99,8 +116,8 @@ hard fixed point. A matrix-free conjugate-gradient forward solve (Laplacian-vect
 the edge list, $O(E)$/iter) replaces the dense $O(N^3)$ solve, matching it to $\sim\!10^{-3}$ and
 solving $N\!\approx\!2400$ neighborhoods in $\sim\!0.4$s.
 
-\begin{figure}[h]\centering
-\includegraphics[width=\textwidth]{figs/implicit_diff.png}
+\begin{figure}[t]\centering
+\includegraphics[width=\textwidth]{figs/implicit_diff.pdf}
 \caption{Differentiating and solving the flow at scale. (a) The implicit gradient matches a
 finite-difference gold standard to relative error $\sim\!10^{-8}$ across graph sizes.
 (b) Backward memory is flat in solver depth for implicit differentiation (forward runs under
@@ -119,8 +136,8 @@ monotonic crossover: the flow's advantage is $+0.159$ MSE at the most coupled se
 (density $0.35$: flow $0.586$ vs.\ independent $0.745$) and falls to $-0.019$ when unconstrained
 (density $1.0$: $0.509$ vs.\ $0.490$). The flow wins \emph{iff} the steps are coupled.
 
-\begin{figure}[h]\centering
-\includegraphics[width=0.92\textwidth]{figs/coupling.png}
+\begin{figure}[t]\centering
+\includegraphics[width=\textwidth]{figs/coupling.pdf}
 \caption{Conserved-flow routing beats independent per-step scoring exactly when reasoning steps
 are coupled. (a) held-out MSE vs.\ constraint density (left = more coupled); (b) the flow's
 advantage crosses zero as the task becomes marginalizable. MetaQA 2-hop sits at the unconstrained
@@ -128,13 +145,13 @@ end, predicting the tie we observe below.}
 \label{fig:coupling}
 \end{figure}
 
-\paragraph{MetaQA 2-hop: the predicted tie (real data).} MetaQA~\cite{zhang2018metaqa} KG: 43{,}234 entities, 9 relations,
+\paragraph{MetaQA 2-hop: the predicted tie (real data).} MetaQA~\citep{zhang2018metaqa} KG: 43{,}234 entities, 9 relations,
 134{,}741 triples; 2-hop questions, 8k train / 1.5k test, matched GRU encoder with per-hop query
 heads. A 2-hop answer marginalizes over the bridge entity, so the boundary predicts no benefit
 from coupling---and indeed the conserved flow ties a no-flow per-step softmax
 (Table~\ref{tab:metaqa}). Both attain $0$ hallucination by construction (the legal graph, not the
 flow, provides that).
-\begin{table}[h]\centering
+\begin{table}[t]\centering
 \begin{tabular}{lccc}
 \toprule
 Method & hits@1 (raw) & hits@1 (degree-norm) & hallucination \\
@@ -146,8 +163,8 @@ No-flow ablation (same encoder/graph) & 0.885 & 0.944 & $0$ (by construction) \\
 \caption{MetaQA 2-hop. The conserved flow does not improve accuracy over a matched no-flow
 baseline on this marginalizable task---consistent with Fig.~\ref{fig:coupling}. The legality
 guarantee comes from the topology and holds for both. By contrast, embedding-based KGQA methods
-that score answers over \emph{all} entities (e.g.\ EmbedKGQA~\cite{saxena2020embedkgqa}, built on
-ComplEx~\cite{trouillon2016complex}) carry no such guarantee and can
+that score answers over \emph{all} entities (e.g.\ EmbedKGQA~\citep{saxena2020embedkgqa}, built on
+ComplEx~\citep{trouillon2016complex}) carry no such guarantee and can
 answer outside the legal set.}
 \label{tab:metaqa}
 \end{table}
@@ -157,7 +174,7 @@ the flow selects one legal \emph{path of experts} and composes them sequentially
 sequential expert-composition task (density $\approx\!0.6$, 4 seeds), the conserved flow beats both
 standard top-$k$ gating and Routing-Free MoE on accuracy and on legality (Table~\ref{tab:moe})---the
 coupled regime where Fig.~\ref{fig:coupling} predicts a win.
-\begin{table}[h]\centering
+\begin{table}[t]\centering
 \begin{tabular}{lcc}
 \toprule
 Router & held-out MSE $\downarrow$ & illegal-transition rate $\downarrow$ \\
@@ -188,8 +205,8 @@ legality only $0.150\pm0.010$ of the time versus $0.899$ for the top-$1$ gate. T
 deployment value: same sparsity budget, better accuracy, and expert transitions that respect a
 hard constraint graph.
 
-\begin{figure}[h]\centering
-\includegraphics[width=0.72\textwidth]{figs/moe_frontier.png}
+\begin{figure}[t]\centering
+\includegraphics[width=0.55\textwidth]{figs/moe_frontier.pdf}
 \caption{Conserved-flow routing is Pareto-dominant on the MoE accuracy/compute frontier (coupled
 regime, 3 seeds): lowest error at one active expert per layer, while the top-$k$ gate needs more
 experts or routes illegally (illegal-transition rate annotated).}
@@ -210,7 +227,7 @@ accuracy ($0.984$) but spends twice the compute; the flow and the top-$2$ gate t
 points of the accuracy/compute frontier, with the flow owning the sparse, legality-guaranteed end.
 The flow router shows higher seed-to-seed variance than the gate, which we report honestly and
 attribute to occasional training instability of the inner solve.
-\begin{table}[h]\centering
+\begin{table}[t]\centering
 \begin{tabular}{lccc}
 \toprule
 Router & token acc $\uparrow$ & active experts/layer $\downarrow$ & illegal-transition $\downarrow$ \\
@@ -234,19 +251,19 @@ flow's $\approx\!0$: soft/param-sharing constraints can make legality worse, not
 guarantee it---the safety argument for topology-enforced expert routing in deployed MoE.
 
 \section{Related work}
-\paragraph{Sparse MoE routing.} Standard MoE~\cite{shazeer2017,fedus2022switch} uses a learned top-$k$ gate per layer, chosen
-\emph{independently}; load-balancing losses keep experts utilized. PathMoE~\cite{pathmoe} constrains the path
+\paragraph{Sparse MoE routing.} Standard MoE~\citep{shazeer2017,fedus2022switch} uses a learned top-$k$ gate per layer, chosen
+\emph{independently}; load-balancing losses keep experts utilized. PathMoE~\citep{pathmoe} constrains the path
 space by \emph{tying} router parameters across positions (a soft, statistical constraint);
-Chain-of-Experts~\cite{coe} composes experts sequentially with a learned per-step router; Routing-Free MoE~\cite{routingfree}
+Chain-of-Experts~\citep{coe} chains experts sequentially within a layer with a learned router at each step; Routing-Free MoE~\citep{routingfree}
 drops the gate for threshold self-activation. All route by learned scores with no hard guarantee
 on which expert may follow which. Our router is a conserved flow whose \emph{topology} makes
 illegal expert transitions impossible, whose objective is a min-cost path (not a sampler), and
 which is differentiable and jointly trained; our contribution over these is (i) the hard,
 input-conditional legality guarantee and (ii) the \emph{condition} (coupling) under which such
 routing beats an independent gate.
-\paragraph{Flow / graph reasoning.} GFlowNets~\cite{bengio2021gflownet} (flow \emph{sampling}, not min-cost);
-PathRAG~\cite{pathrag} (non-parametric flow pruning); D-RAG~\cite{drag} (differentiable subgraph \emph{set}); MoG~\cite{mog} (heuristic
-topology router); Physarum differentiable-LP layers~\cite{physarumlp} (LPs, not expert routing). We concede the scooped
+\paragraph{Flow / graph reasoning.} GFlowNets~\citep{bengio2021gflownet} (flow \emph{sampling}, not min-cost);
+PathRAG~\citep{pathrag} (non-parametric flow pruning); D-RAG~\citep{drag} (differentiable subgraph \emph{set}); MoG~\citep{mog} (a topology-aware
+router over expert graphs); Physarum differentiable-LP layers~\citep{physarumlp} (LPs, not expert routing). We concede the scooped
 \emph{outcomes} (PathMoE's path-constraint benefits, CoE's sequential composition, GFlowNet's
 flow-over-DAG) and claim the mechanism, the guarantee, and the coupling condition.
 
@@ -273,54 +290,29 @@ hope the condition itself---reach for coupled routing when, and only when, the s
 another---is useful to practitioners choosing among routers, and that the legality guarantee is
 useful wherever MoE must respect a hard constraint on which expert may follow which.
 
-\begin{thebibliography}{99}
-\bibitem{nakagaki2000} T.~Nakagaki, H.~Yamada, and \'A.~T\'oth.
-Maze-solving by an amoeboid organism. \emph{Nature}, 407:470, 2000.
 
-\bibitem{tero2007} A.~Tero, R.~Kobayashi, and T.~Nakagaki.
-A mathematical model for adaptive transport network in path finding by true slime mold.
-\emph{Journal of Theoretical Biology}, 244(4):553--564, 2007.
+% Methods/pipeline figure goes here (Fig. 1) once drawn -- see figstyle.py for the palette.
 
-\bibitem{tero2010} A.~Tero, S.~Takagi, T.~Saigusa, K.~Ito, D.~P.~Bebber, M.~D.~Fricker,
-K.~Yumiki, R.~Kobayashi, and T.~Nakagaki.
-Rules for biologically inspired adaptive network design. \emph{Science}, 327(5964):439--442, 2010.
+\subsection*{AI use statement}
+% EDIT THIS so it matches exactly what you did. ICLR requires it; it does not count toward the page limit.
+The research direction and the central idea (using a conserved Physarum flow as an expert router,
+and asking when coupled routing helps) originated with the author. We used generative AI tools
+(an LLM-based coding assistant) extensively: to implement and debug the experiment code, to run
+experiments, to produce the figures, to search for and verify related work, and to draft and edit
+the text of this paper. We have reviewed all AI-assisted work: every number reported here comes
+from code in our repository, the implicit-differentiation code is checked against finite
+differences, and every reference was checked against the published paper. We take responsibility
+for the final content of this work, including text, claims, and artifacts produced with the aid of
+generative AI.
 
-\bibitem{bai2019deq} S.~Bai, J.~Z.~Kolter, and V.~Koltun.
-Deep equilibrium models. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2019.
+\subsection*{Reproducibility statement}
+All experiments use small models and public data (MetaQA; \citealp{zhang2018metaqa}) and run on a
+single GPU or CPU. The method is specified in \S\ref{sec:method} and \S\ref{sec:scaling}; for every
+table we report the number of seeds and mean~$\pm$~standard deviation, and the implicit gradient is
+verified against finite differences (Fig.~\ref{fig:implicit}). Code for all experiments and figures
+will be released upon publication.
 
-\bibitem{shazeer2017} N.~Shazeer, A.~Mirhoseini, K.~Maziarz, A.~Davis, Q.~Le, G.~Hinton, and J.~Dean.
-Outrageously large neural networks: The sparsely-gated mixture-of-experts layer.
-In \emph{International Conference on Learning Representations (ICLR)}, 2017.
-
-\bibitem{fedus2022switch} W.~Fedus, B.~Zoph, and N.~Shazeer.
-Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity.
-\emph{Journal of Machine Learning Research}, 23(120):1--39, 2022.
-
-\bibitem{bengio2021gflownet} E.~Bengio, M.~Jain, M.~Korablyov, D.~Precup, and Y.~Bengio.
-Flow network based generative models for non-iterative diverse candidate generation.
-In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2021.
-
-\bibitem{zhang2018metaqa} Y.~Zhang, H.~Dai, Z.~Kozareva, A.~J.~Smola, and L.~Song.
-Variational reasoning for question answering with knowledge graph.
-In \emph{AAAI Conference on Artificial Intelligence}, 2018.
-
-\bibitem{saxena2020embedkgqa} A.~Saxena, A.~Tripathi, and P.~Talukdar.
-Improving multi-hop question answering over knowledge graphs using knowledge base embeddings.
-In \emph{Annual Meeting of the Association for Computational Linguistics (ACL)}, 2020.
-
-\bibitem{trouillon2016complex} T.~Trouillon, J.~Welbl, S.~Riedel, \'E.~Gaussier, and G.~Bouchard.
-Complex embeddings for simple link prediction.
-In \emph{International Conference on Machine Learning (ICML)}, 2016.
-
-% ---- VERIFY the entries below before submission: identifiers are from the project notes;
-% ---- confirm titles/authors/venues against the actual papers.
-\bibitem{pathmoe} Path-constrained mixture-of-experts. arXiv:2603.18297, 2026. % VERIFY
-\bibitem{coe} Chain-of-Experts. arXiv:2506.18945, 2025. % VERIFY
-\bibitem{routingfree} Routing-free mixture-of-experts. arXiv:2604.00801, 2026. % VERIFY
-\bibitem{mog} Mixture-of-experts over knowledge graphs (MoG). arXiv:2605.31010, 2026. % VERIFY
-\bibitem{physarumlp} Physarum-powered differentiable linear programming layers. In \emph{AAAI}, 2021; arXiv:2004.14539. % VERIFY
-\bibitem{pathrag} PathRAG: flow-based path pruning for graph retrieval-augmented generation. % VERIFY
-\bibitem{drag} D-RAG: differentiable knowledge-graph subgraph retrieval. In \emph{EMNLP}, 2025. % VERIFY
-\end{thebibliography}
+\bibliography{references}
+\bibliographystyle{iclr2027_conference}
 
 \end{document}

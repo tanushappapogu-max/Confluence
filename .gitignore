@@ -9,3 +9,12 @@ paper/*.log
 paper/*.out
 paper/*.toc
 paper/*.synctex.gz
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+
+# private working notes (kept out of the public repo)
+passover.md
+PAPER_NOTES.md
+SUBMISSION_STATUS.md

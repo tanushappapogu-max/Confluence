@@ -3,16 +3,13 @@ Three panels, all from live measurement (no synthetic/hand-drawn numbers):
   (a) correctness  -- relative error of the implicit gradient vs finite-difference gold, per N
   (b) memory       -- peak traced backward memory vs solver depth: unroll grows, implicit flat
   (c) scaling      -- wall-clock of exact-Jacobian vs matrix-free implicit gradient vs #edges
-Saves paper/figs/implicit_diff.png. Run: python3 make_fig_implicit.py
+Saves paper/figs/implicit_diff.{pdf,png}. Run: python3 make_fig_implicit.py
 """
-import os, time, tracemalloc, torch, matplotlib
-matplotlib.use("Agg")
+import time, tracemalloc, torch
 import matplotlib.pyplot as plt
+from figstyle import OURS, BASE, NEUTRAL, INK2, save
 import implicit_diff as m
 torch.set_default_dtype(torch.float64)
-
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper", "figs")
-os.makedirs(OUT, exist_ok=True)
 
 # ---- (a) correctness: implicit vs finite-difference gold, across graph sizes ----
 Ns, rels = [], []
@@ -48,27 +45,29 @@ for N in [40, 80, 160, 300]:
 print("edges:", Es, "| exact ms:", [f"{x:.0f}" for x in t_ex], "| free ms:", [f"{x:.0f}" for x in t_fr])
 
 # ---- plot ----
-plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False})
-fig, ax = plt.subplots(1, 3, figsize=(11, 3.2))
-C_IM, C_UN, C_FR = "#2563eb", "#dc2626", "#059669"
+fig, ax = plt.subplots(1, 3, figsize=(6.8, 2.2))
 
-ax[0].semilogy(Ns, rels, "o-", color=C_IM)
-ax[0].axhline(1e-6, ls="--", color="#9ca3af", lw=1)
-ax[0].set_title("(a) gradient correctness", fontsize=10)
-ax[0].set_xlabel("graph size $N$"); ax[0].set_ylabel("rel. error vs finite-diff")
-ax[0].set_ylim(1e-10, 1e-2); ax[0].text(Ns[-1], 2e-6, "machine-precision band", ha="right", va="bottom", color="#6b7280", fontsize=8)
+ax[0].semilogy(Ns, rels, "o-", color=OURS)
+ax[0].axhline(1e-6, ls="--", color=NEUTRAL, lw=1)
+ax[0].set_title("(a) gradient correctness")
+ax[0].set_xlabel("graph size $N$"); ax[0].set_ylabel("rel. error vs. finite diff.")
+ax[0].set_ylim(1e-10, 1e-2)
+ax[0].text(Ns[-1], 2e-6, "$10^{-6}$", ha="right", va="bottom", color=INK2, fontsize=7.5)
 
-ax[1].plot(steps, mem_un, "s-", color=C_UN, label="unroll (autograd)")
-ax[1].plot(steps, mem_im, "o-", color=C_IM, label="implicit (ours)")
-ax[1].set_title("(b) backward memory", fontsize=10)
-ax[1].set_xlabel("solver steps"); ax[1].set_ylabel("peak memory (MB)"); ax[1].legend(frameon=False, fontsize=8)
+ax[1].plot(steps, mem_un, "s-", color=BASE)
+ax[1].plot(steps, mem_im, "o-", color=OURS)
+ax[1].text(steps[-1] * 1.04, mem_un[-1], "unrolled", color=INK2, fontsize=7.5, ha="left", va="center")
+ax[1].text(steps[-1] * 1.04, mem_im[-1], "implicit\n(ours)", color=INK2, fontsize=7.5, ha="left", va="bottom")
+ax[1].set_xlim(0, steps[-1] * 1.45); ax[1].set_ylim(0, max(mem_un) * 1.1)
+ax[1].set_title("(b) backward memory")
+ax[1].set_xlabel("solver steps"); ax[1].set_ylabel("peak memory (MB)")
 
-ax[2].plot(Es, t_ex, "s-", color="#7c3aed", label="exact Jacobian $O(E^2)$")
-ax[2].plot(Es, t_fr, "o-", color=C_FR, label="matrix-free (ours)")
-ax[2].set_title("(c) gradient wall-clock", fontsize=10)
-ax[2].set_xlabel("edges $E$"); ax[2].set_ylabel("time (ms)"); ax[2].legend(frameon=False, fontsize=8)
+ax[2].plot(Es, t_ex, "s-", color=BASE)
+ax[2].plot(Es, t_fr, "o-", color=OURS)
+ax[2].text(Es[-1] * 1.04, t_ex[-1], "exact\nJacobian", color=INK2, fontsize=7.5, ha="left", va="center")
+ax[2].text(Es[-1] * 1.04, t_fr[-1], "matrix-\nfree (ours)", color=INK2, fontsize=7.5, ha="left", va="center")
+ax[2].set_xlim(0, Es[-1] * 1.45)
+ax[2].set_title("(c) gradient wall-clock")
+ax[2].set_xlabel("edges $E$"); ax[2].set_ylabel("time (ms)")
 
-fig.tight_layout()
-p = os.path.join(OUT, "implicit_diff.png")
-fig.savefig(p, dpi=160, bbox_inches="tight")
-print("saved", p)
+save(fig, "implicit_diff")

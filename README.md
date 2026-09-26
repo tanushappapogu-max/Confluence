@@ -1,74 +1,57 @@
 # Confluence
 
-**Unifying retrieval and computation as a single conserved-flow path.**
+**When does conserved-flow routing help? A coupling condition for Mixture-of-Experts, with a legality guarantee.**
 
-Confluence routes one differentiable, min-cost conserved flow through a single graph
-whose nodes are **both** knowledge-base entries (data) **and** expert modules
-(computation). A query is answered by one connected path that *retrieves and computes
-at the same time*, and illegal reasoning steps are impossible **by construction** —
-there is no edge where there is no triple.
+Sparse Mixture-of-Experts (MoE) gates pick experts independently at every layer. This repo studies a
+*coupled* router instead: a differentiable Tero–Nakagaki (Physarum) conserved-flow dynamic that relaxes
+to one min-cost path through a graph whose edges are exactly the legal expert transitions. Flux on an
+illegal transition is zero by construction.
 
-## The idea
+Main finding: coupled routing beats independent per-step gating **when the steps are mutually
+constraining**, and ties when the output marginalizes over intermediate steps (MetaQA 2-hop).
 
-Standard pipelines split *retrieval* (search a memory) and *computation* (run a model)
-into separate stages glued together by averaging the top-k results. Confluence collapses
-them into one operation:
+## Results (paper tables)
 
-1. Build a per-query graph: retrieved entities become **data nodes**, relations/experts
-   become **compute nodes**, and **legal transitions are the graph's edges**.
-2. Set input-conditional edge costs; inject a conserved flow from the query.
-3. A Physarum-style (slime-mold) reinforcement dynamic relaxes to the cheapest **legal**
-   path — no learned gate.
-4. Walk the path: at a data node, inject content; at a compute node, apply the expert.
-
-**Two guarantees fall out of the mechanism:**
-- **Legality by topology** — the selected path can only traverse real edges, so
-  constraint violations are impossible (not merely penalized).
-- **Conservation coupling** — flow-in = flow-out couples consecutive steps.
-
-## Current results
-
-| Setting | Metric | Result |
+| Experiment | Script | Raw log |
 |---|---|---|
-| Synthetic constrained routing (4 seeds) | held-out MSE / illegal-rate | best on both at every noise level |
-| Density sweep (3 seeds) | advantage vs constraint strength | scales monotonically; ~tie when unconstrained (causal) |
-| Mixed data+compute graph (3 seeds) | illegal-hop rate | ~0 by construction vs ~0.17 baselines |
-| MetaQA 1-hop | hits@1 | 0.769, 0 hallucination |
-| MetaQA 2-hop (tractable subset) | hits@1 | **0.948**, 0 hallucination |
+| Coupling crossover (density sweep, 3 seeds) | `density_sweep.py` | `results/density_sweep_flow_vs_independent.txt` |
+| Constrained expert routing vs top-k / Routing-Free MoE (4 seeds) | `mycelial_final.py` | `results/moe_routing_comparison_4seed.txt` |
+| MoE FFN accuracy/compute frontier (3 seeds) | `moe_layer_demo.py` | `results/moe_layer_frontier_3seed.txt` |
+| MoE transformer, flow vs top-k gate (3 seeds + density sweep) | `moe_transformer.py` | `results/moe_transformer_*.txt` |
+| MetaQA 2-hop: flow vs matched no-flow ablation | `metaqa_confluence_2hop_v2.py`, `metaqa_confluence_2hop_ablation.py` | `results/metaqa_2hop_noflow_ablation.txt` |
+| Implicit differentiation check (vs finite differences) | `implicit_diff.py` | printed |
 
-All numbers are reproducible from the scripts below. See `PAPER_NOTES.md` for the full
-record, exact numbers, honest caveats, and the novelty positioning.
+Other scripts: `metaqa_confluence_2hop_implicit.py` (MetaQA with implicit-diff training),
+`metaqa_confluence_3hop_ablation.py` / `metaqa_3hop_pilot.py` (3-hop), `metaqa_embedkgqa_baseline.py`
+(ComplEx/EmbedKGQA-style baseline), `implicit_train_demo.py`, `metaqa_load.py` (data stats).
 
-## Repository
+## Run everything
 
-```
-physarum_spike.py            flow mechanism (path emerges, optimal, differentiable)
-diag_oracle.py               expert-learnability diagnostic (MLP required, not Linear)
-mycelial_arch.py             backbone architecture + oracle ceiling
-mycelial_final.py            constrained-routing win vs Routing-Free MoE (multi-seed)
-density_sweep.py             causal proof: advantage scales with constraint strength
-confluence_spike.py          go/no-go: one flow through data + compute nodes
-confluence_kg_mock.py        KG pipeline on a mock knowledge graph
-metaqa_load.py               MetaQA loader + KG / neighborhood stats
-metaqa_confluence.py         MetaQA 1-hop
-metaqa_confluence_2hop.py    MetaQA 2-hop
-metaqa_confluence_2hop_v2.py MetaQA 2-hop (GRU + per-hop heads + degree-norm decode)
-make_fig_*.py, eqns.py       figures
-data/metaqa/                 MetaQA text (KB + 1/2/3-hop QA); not tracked in git
-```
+- **Colab (GPU, checkpoints to Google Drive, resumable):** open
+  [`Confluence_Colab.ipynb`](https://colab.research.google.com/github/tanushappapogu-max/Confluence/blob/main/Confluence_Colab.ipynb),
+  set the runtime to GPU, and Run all.
+- **Locally:** `pip install torch numpy matplotlib`, then e.g. `python3 moe_transformer.py`
+  (env vars `NSEEDS`, `EPOCHS`, `NTRAIN`, `DENSITY`, `SEED_START` control scale).
+
+## Figures and paper
+
+- `figstyle.py` holds the shared palette (ours = blue, main baseline = orange, top-2 = aqua, dense = gray)
+  and matplotlib settings; `make_fig_coupling.py`, `make_fig_moe.py`, `make_fig_implicit.py` write
+  vector PDFs to `paper/figs/`.
+- `paper/` is the ICLR 2027 LaTeX source (`main.tex`, `references.bib`, official style files).
+  Compile with pdfLaTeX + BibTeX, or upload the folder to Overleaf.
 
 ## Data
 
-MetaQA (movie knowledge-graph QA): 43,234 entities, 9 relations, 134,741 triples, plus
-1/2/3-hop question sets. Text mirror of the original dataset. `data/` is gitignored.
+MetaQA (KB + 2/3-hop QA) goes in `data/metaqa/` (not tracked). The Colab notebook fetches and stages it.
 
-## Status
+## Layout
 
-Research in progress. Working: mechanism, backbone, real-data pipeline, 2-hop at 0.948
-with a hard legality guarantee. Next: fair baselines (EmbedKGQA / PathRAG / GFlowNet-KG),
-implicit-differentiation and sparse solve for the heavy-degree tail and 3-hop, and
-external validity on WebQSP/CWQ.
-
-## Requirements
-
-Python 3, PyTorch, NumPy, Matplotlib.
+```
+*.py                 experiments (see table above) + figure scripts
+figstyle.py          shared figure palette and style
+results/             raw logs behind every number in the paper
+paper/               ICLR 2027 LaTeX source + figures
+archive/             early prototypes (mechanism spikes, 1-hop, mock KG); kept for history, not maintained
+Confluence_Colab.ipynb   full-scale runs with Drive checkpointing
+```
